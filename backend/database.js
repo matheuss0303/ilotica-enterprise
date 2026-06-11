@@ -1,15 +1,77 @@
-const sqlite3 = require("sqlite3");
-const { open } = require("sqlite");
+const { Pool } = require("pg");
+
+function converterParametros(sql) {
+  let contador = 0;
+  return sql.replace(/\?/g, () => {
+    contador += 1;
+    return `$${contador}`;
+  });
+}
+
+function ajustarLinha(row) {
+  if (!row) return row;
+
+  return {
+    ...row,
+
+    precoCusto: row.precocusto ?? row.precoCusto,
+    precoVenda: row.precovenda ?? row.precoVenda,
+
+    valorTotal: row.valortotal ?? row.valorTotal,
+    valorPago: row.valorpago ?? row.valorPago,
+    valorRestante: row.valorrestante ?? row.valorRestante,
+
+    criadoPor: row.criadopor ?? row.criadoPor,
+  };
+}
 
 async function conectarBanco() {
-  const db = await open({
-    filename: "./ilotica.db",
-    driver: sqlite3.Database,
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false,
+    },
   });
+
+  const db = {
+    async run(sql, params = []) {
+      let query = converterParametros(sql.trim());
+
+      if (
+        query.toLowerCase().startsWith("insert") &&
+        !query.toLowerCase().includes("returning")
+      ) {
+        query += " RETURNING id";
+      }
+
+      const resultado = await pool.query(query, params);
+
+      return {
+        lastID: resultado.rows?.[0]?.id,
+        changes: resultado.rowCount,
+      };
+    },
+
+    async get(sql, params = []) {
+      const query = converterParametros(sql);
+      const resultado = await pool.query(query, params);
+      return ajustarLinha(resultado.rows[0]);
+    },
+
+    async all(sql, params = []) {
+      const query = converterParametros(sql);
+      const resultado = await pool.query(query, params);
+      return resultado.rows.map(ajustarLinha);
+    },
+
+    async exec(sql) {
+      return pool.query(sql);
+    },
+  };
 
   await db.exec(`
     CREATE TABLE IF NOT EXISTS clientes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       nome TEXT NOT NULL,
       telefone TEXT NOT NULL,
       whatsapp TEXT,
@@ -17,35 +79,40 @@ async function conectarBanco() {
       nascimento TEXT,
       endereco TEXT,
       observacoes TEXT,
-      foto TEXT
+      foto TEXT,
+      criadopor TEXT
     );
 
     CREATE TABLE IF NOT EXISTS produtos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       nome TEXT NOT NULL,
       marca TEXT,
       categoria TEXT NOT NULL,
-      precoCusto REAL DEFAULT 0,
-      precoVenda REAL NOT NULL,
+      precocusto REAL DEFAULT 0,
+      precovenda REAL NOT NULL,
       estoque INTEGER NOT NULL,
       estoque_minimo INTEGER DEFAULT 5
     );
 
     CREATE TABLE IF NOT EXISTS vendas (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       cliente TEXT NOT NULL,
       produto TEXT NOT NULL,
-      valorTotal REAL NOT NULL,
-      formaPagamento TEXT NOT NULL,
+      valortotal REAL NOT NULL,
+      desconto REAL DEFAULT 0,
+      valorpago REAL DEFAULT 0,
+      valorrestante REAL DEFAULT 0,
+      formapagamento TEXT NOT NULL,
       status TEXT DEFAULT 'Orçamento',
       data TEXT,
       usuario TEXT
     );
 
     CREATE TABLE IF NOT EXISTS exames (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       cliente TEXT NOT NULL,
       data TEXT NOT NULL,
+      criadopor TEXT,
       status_os TEXT DEFAULT 'Aguardando Lente',
       longe_od_esferico TEXT,
       longe_od_cilindrico TEXT,
@@ -64,25 +131,26 @@ async function conectarBanco() {
       perto_oe_eixo TEXT,
       perto_oe_dnp TEXT,
       adicao TEXT,
+      altura TEXT,
       medico TEXT,
       tipo_lente TEXT,
       observacoes TEXT
     );
 
     CREATE TABLE IF NOT EXISTS usuarios (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       nome TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
       senha TEXT NOT NULL,
       tipo TEXT DEFAULT 'admin',
       email_confirmado INTEGER DEFAULT 1,
       token_confirmacao TEXT,
-      token_expira_em INTEGER,
+      token_expira_em BIGINT,
       primeiro_acesso INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS loja (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       nome TEXT,
       cnpj TEXT,
       telefone TEXT,
@@ -92,7 +160,7 @@ async function conectarBanco() {
     );
 
     CREATE TABLE IF NOT EXISTS logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       usuario TEXT,
       acao TEXT NOT NULL,
       data TEXT NOT NULL,
@@ -100,7 +168,7 @@ async function conectarBanco() {
     );
 
     CREATE TABLE IF NOT EXISTS agenda (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       cliente TEXT NOT NULL,
       telefone TEXT,
       data TEXT NOT NULL,
@@ -110,63 +178,13 @@ async function conectarBanco() {
     );
   `);
 
-  async function adicionarColuna(tabela, coluna, tipo) {
-    try {
-      await db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${tipo}`);
-    } catch (error) {}
-  }
-
-  await adicionarColuna("produtos", "estoque_minimo", "INTEGER DEFAULT 5");
-  await adicionarColuna("vendas", "usuario", "TEXT");
-  await adicionarColuna("clientes", "foto", "TEXT");
-
-  await adicionarColuna("usuarios", "email_confirmado", "INTEGER DEFAULT 1");
-  await adicionarColuna("usuarios", "token_confirmacao", "TEXT");
-  await adicionarColuna("usuarios", "token_expira_em", "INTEGER");
-  await adicionarColuna("usuarios", "primeiro_acesso", "INTEGER DEFAULT 0");
-
-  await adicionarColuna("exames", "status_os", "TEXT DEFAULT 'Aguardando Lente'");
-  await adicionarColuna("exames", "longe_od_esferico", "TEXT");
-  await adicionarColuna("exames", "longe_od_cilindrico", "TEXT");
-  await adicionarColuna("exames", "longe_od_eixo", "TEXT");
-  await adicionarColuna("exames", "longe_od_dnp", "TEXT");
-  await adicionarColuna("exames", "longe_oe_esferico", "TEXT");
-  await adicionarColuna("exames", "longe_oe_cilindrico", "TEXT");
-  await adicionarColuna("exames", "longe_oe_eixo", "TEXT");
-  await adicionarColuna("exames", "longe_oe_dnp", "TEXT");
-  await adicionarColuna("exames", "perto_od_esferico", "TEXT");
-  await adicionarColuna("exames", "perto_od_cilindrico", "TEXT");
-  await adicionarColuna("exames", "perto_od_eixo", "TEXT");
-  await adicionarColuna("exames", "perto_od_dnp", "TEXT");
-  await adicionarColuna("exames", "perto_oe_esferico", "TEXT");
-  await adicionarColuna("exames", "perto_oe_cilindrico", "TEXT");
-  await adicionarColuna("exames", "perto_oe_eixo", "TEXT");
-  await adicionarColuna("exames", "perto_oe_dnp", "TEXT");
-  await adicionarColuna("exames", "adicao", "TEXT");
-  await adicionarColuna("exames", "medico", "TEXT");
-  await adicionarColuna("exames", "tipo_lente", "TEXT");
-  await adicionarColuna("clientes", "criadoPor", "TEXT");
-  await adicionarColuna("vendas", "desconto", "REAL DEFAULT 0");
-  await adicionarColuna("vendas", "valorPago", "REAL DEFAULT 0");
-  await adicionarColuna("vendas", "valorRestante", "REAL DEFAULT 0");
-  await adicionarColuna("exames", "altura", "TEXT");
-  await adicionarColuna("exames", "criadoPor", "TEXT");
-
-
-
-  await db.run(`
-    UPDATE usuarios 
-    SET email_confirmado = 1, primeiro_acesso = 0
-    WHERE email_confirmado IS NULL
-  `);
-
-
-  const lojaPadrao = await db.get("SELECT * FROM loja WHERE id = 1");
+  const lojaPadrao = await db.get("SELECT * FROM loja WHERE id = ?", [1]);
 
   if (!lojaPadrao) {
     await db.run(
-      `INSERT INTO loja (id, nome, cnpj, telefone, endereco, instagram, horario)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO loja 
+      (id, nome, cnpj, telefone, endereco, instagram, horario)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         1,
         "IL Ótica",
@@ -178,28 +196,6 @@ async function conectarBanco() {
       ]
     );
   }
-
-  const adminExiste = await db.get(
-  "SELECT * FROM usuarios WHERE tipo = 'admin'"
-);
-
-if (!adminExiste) {
-  await db.run(
-    `INSERT INTO usuarios
-    (nome, email, senha, tipo, email_confirmado, primeiro_acesso)
-    VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      "Administrador",
-      "matheusoaress2020@gmail.com",
-      "123456",
-      "admin",
-      1,
-      0,
-    ]
-  );
-
-  console.log("ADMIN RECUPERADO COM SUCESSO");
-}
 
   return db;
 }

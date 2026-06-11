@@ -898,6 +898,7 @@ app.get("/clientes/:id/historico", async (req, res) => {
   });
 });
 
+
   app.listen(3000, () => {
     console.log("🚀 Servidor rodando na porta 3000 com SQLite");
   });
