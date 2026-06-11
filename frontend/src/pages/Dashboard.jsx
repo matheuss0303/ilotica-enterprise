@@ -12,12 +12,13 @@ import {
 } from "recharts";
 import api from "../services/api";
 
-function Dashboard() {
+function Dashboard({ usuarioLogado }) {
   const [aba, setAba] = useState("resumo");
   const [clientes, setClientes] = useState([]);
   const [produtos, setProdutos] = useState([]);
   const [vendas, setVendas] = useState([]);
   const [exames, setExames] = useState([]);
+  const podeVerFinanceiro = usuarioLogado?.tipo === "admin";
 
   useEffect(() => {
     carregarDados();
@@ -154,15 +155,21 @@ function Dashboard() {
 
       {aba === "resumo" && (
         <section className="cards">
-          <div className="card">
-            <span>Faturamento Total</span>
-            <strong>R$ {faturamentoTotal.toFixed(2)}</strong>
-          </div>
 
-          <div className="card">
-            <span>Faturamento Hoje</span>
-            <strong>R$ {faturamentoHoje.toFixed(2)}</strong>
-          </div>
+          {podeVerFinanceiro && (
+            <>
+              <div className="card">
+                <span>Faturamento Total</span>
+                <strong>R$ {faturamentoTotal.toFixed(2)}</strong>
+              </div>
+
+              <div className="card">
+                <span>Faturamento Hoje</span>
+                <strong>R$ {faturamentoHoje.toFixed(2)}</strong>
+              </div>
+            </>
+          )}
+          
 
           <div className="card">
             <span>Clientes</span>
@@ -286,7 +293,7 @@ function Dashboard() {
               <div className="item" key={venda.id}>
                 <strong>{venda.cliente}</strong>
                 <span>Produto: {venda.produto}</span>
-                <span>Valor: R$ {Number(venda.valorTotal).toFixed(2)}</span>
+                {podeVerFinanceiro && <span>Valor: R$ {Number(venda.valorTotal).toFixed(2)}</span>}              
                 <span>Pagamento: {venda.formaPagamento}</span>
                 <span>Status: {venda.status}</span>
                 <small>Data: {venda.data}</small>

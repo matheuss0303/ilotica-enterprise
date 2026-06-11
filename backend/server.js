@@ -2,28 +2,30 @@ const express = require("express");
 const cors = require("cors");
 const conectarBanco = require("./database");
 const bcrypt = require("bcryptjs");
-
-const app = express();
+const crypto = require("crypto");
 
 require("dotenv").config();
 const nodemailer = require("nodemailer");
 
+const app = express();
+
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 
 let db;
 
 async function iniciarServidor() {
   db = await conectarBanco();
-  const transportadorEmail = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
 
-const codigosRecuperacao = {};
+  const transportadorEmail = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
+  const codigosRecuperacao = {};
 
   app.get("/", (req, res) => {
     res.json({
@@ -40,97 +42,62 @@ const codigosRecuperacao = {};
   });
 
   app.post("/clientes", async (req, res) => {
-    const { nome, telefone, whatsapp, cpf, nascimento, endereco, observacoes } =
-      req.body;
+  const {
+    nome,
+    telefone,
+    whatsapp,
+    cpf,
+    nascimento,
+    endereco,
+    observacoes,
+    foto,
+    criadoPor,
+  } = req.body;
 
-    if (!nome || !telefone) {
-      return res.status(400).json({
-        mensagem: "Nome e telefone são obrigatórios.",
-      });
-    }
-
-    const resultado = await db.run(
-      `INSERT INTO clientes 
-      (nome, telefone, whatsapp, cpf, nascimento, endereco, observacoes)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        nome,
-        telefone,
-        whatsapp || "",
-        cpf || "",
-        nascimento || "",
-        endereco || "",
-        observacoes || "",
-      ]
-    );
-
-    res.status(201).json({ id: resultado.lastID });
-  });
-
-  app.put("/clientes/:id", async (req, res) => {
-    const { id } = req.params;
-    const { nome, telefone, whatsapp, cpf, nascimento, endereco, observacoes } =
-      req.body;
-
-    await db.run(
-      `UPDATE clientes SET
-        nome = ?,
-        telefone = ?,
-        whatsapp = ?,
-        cpf = ?,
-        nascimento = ?,
-        endereco = ?,
-        observacoes = ?
-      WHERE id = ?`,
-      [
-        nome,
-        telefone,
-        whatsapp || "",
-        cpf || "",
-        nascimento || "",
-        endereco || "",
-        observacoes || "",
-        id,
-      ]
-    );
-
-    res.json({ mensagem: "Cliente atualizado com sucesso." });
-  });
-
-  app.delete("/clientes/:id", async (req, res) => {
-    await db.run("DELETE FROM clientes WHERE id = ?", [req.params.id]);
-    res.json({ mensagem: "Cliente removido com sucesso." });
-  });
-
-  app.get("/clientes/:nome/historico", async (req, res) => {
-    const { nome } = req.params;
-
-    const cliente = await db.get("SELECT * FROM clientes WHERE nome = ?", [
+  const resultado = await db.run(
+    `INSERT INTO clientes
+    (
       nome,
-    ]);
+      telefone,
+      whatsapp,
+      cpf,
+      nascimento,
+      endereco,
+      observacoes,
+      foto,
+      criadoPor
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      nome,
+      telefone,
+      whatsapp,
+      cpf,
+      nascimento,
+      endereco,
+      observacoes,
+      foto,
+      criadoPor,
+    ]
+  );
 
-    const vendas = await db.all(
-      "SELECT * FROM vendas WHERE cliente = ? ORDER BY id DESC",
-      [nome]
-    );
+  const agora = new Date();
 
-    const exames = await db.all(
-      "SELECT * FROM exames WHERE cliente = ? ORDER BY id DESC",
-      [nome]
-    );
+await db.run(
+  "INSERT INTO logs (usuario, acao, data, hora) VALUES (?, ?, ?, ?)",
+  [
+    criadoPor || "Sistema",
+    `Criou o cliente ${nome}`,
+    agora.toLocaleDateString("pt-BR"),
+    agora.toLocaleTimeString("pt-BR"),
+  ]
+);
 
-    const totalGasto = vendas.reduce(
-      (total, venda) => total + Number(venda.valorTotal),
-      0
-    );
-
-    res.json({
-      cliente,
-      vendas,
-      exames,
-      totalGasto,
-    });
+  res.json({
+    id: resultado.lastID,
+    mensagem: "Cliente cadastrado com sucesso.",
   });
+});
 
   // PRODUTOS
   app.get("/produtos", async (req, res) => {
@@ -138,44 +105,53 @@ const codigosRecuperacao = {};
     res.json(produtos);
   });
 
- app.post("/produtos", async (req, res) => {
-  const {
-    nome,
-    marca,
-    categoria,
-    precoCusto,
-    precoVenda,
-    estoque,
-    estoque_minimo,
-  } = req.body;
-
-  if (!nome || !categoria || !precoVenda || estoque === "") {
-    return res.status(400).json({
-      mensagem: "Nome, categoria, preço de venda e estoque são obrigatórios.",
-    });
-  }
-
-  const resultado = await db.run(
-    `INSERT INTO produtos 
-      (nome, marca, categoria, precoCusto, precoVenda, estoque, estoque_minimo)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [
+  app.post("/produtos", async (req, res) => {
+    const {
       nome,
-      marca || "",
+      marca,
       categoria,
-      Number(precoCusto) || 0,
-      Number(precoVenda),
-      Number(estoque),
-      Number(estoque_minimo) || 5,
-    ]
-  );
+      precoCusto,
+      precoVenda,
+      estoque,
+      estoque_minimo,
+    } = req.body;
 
-  res.status(201).json({ id: resultado.lastID });
-});
+    if (!nome || !categoria || !precoVenda || estoque === "") {
+      return res.status(400).json({
+        mensagem: "Nome, categoria, preço de venda e estoque são obrigatórios.",
+      });
+    }
+
+    const resultado = await db.run(
+      `INSERT INTO produtos 
+      (nome, marca, categoria, precoCusto, precoVenda, estoque, estoque_minimo)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        nome,
+        marca || "",
+        categoria,
+        Number(precoCusto) || 0,
+        Number(precoVenda),
+        Number(estoque),
+        Number(estoque_minimo) || 5,
+      ]
+    );
+
+    res.status(201).json({ id: resultado.lastID });
+  });
 
   app.put("/produtos/:id", async (req, res) => {
     const { id } = req.params;
-    const { nome, marca, categoria, precoCusto, precoVenda, estoque, estoque_minimo } = req.body;
+
+    const {
+      nome,
+      marca,
+      categoria,
+      precoCusto,
+      precoVenda,
+      estoque,
+      estoque_minimo,
+    } = req.body;
 
     await db.run(
       `UPDATE produtos SET
@@ -214,7 +190,17 @@ const codigosRecuperacao = {};
   });
 
   app.post("/vendas", async (req, res) => {
-    const { cliente, produto, valorTotal, formaPagamento, status } = req.body;
+    const {
+      cliente,
+      produto,
+      valorTotal,
+      desconto,
+      valorPago,
+      valorRestante,
+      formaPagamento,
+      status,
+      usuario,
+    } = req.body;
 
     if (!cliente || !produto || !valorTotal || !formaPagamento) {
       return res.status(400).json({
@@ -243,21 +229,42 @@ const codigosRecuperacao = {};
 
     const resultado = await db.run(
       `INSERT INTO vendas 
-      (cliente, produto, valorTotal, formaPagamento, status, data)
-      VALUES (?, ?, ?, ?, ?, ?)`,
+      (cliente, produto, valorTotal, desconto, valorPago, valorRestante, formaPagamento, status, data, usuario)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         cliente,
         produto,
         Number(valorTotal),
+        Number(desconto) || 0,
+        Number(valorPago) || 0,
+        Number(valorRestante) || 0,
         formaPagamento,
         status || "Orçamento",
         data,
+        usuario || "Não identificado",
       ]
     );
 
     await db.run("UPDATE produtos SET estoque = estoque - 1 WHERE id = ?", [
       produtoEncontrado.id,
     ]);
+
+      const agora = new Date();
+      const datalog = agora.toLocaleDateString("pt-BR");
+      const horalog = agora.toLocaleTimeString("pt-BR");
+
+      await db.run(
+        "INSERT INTO logs (usuario, acao, data, hora) VALUES (?, ?, ?, ?)",
+        [
+          usuario || "Sistema",
+          `Registrou venda para ${cliente} - Produto: ${produto} - Valor: R$ ${Number(valorTotal).toFixed(2)}`,
+          datalog,
+          horalog
+        ]
+      );
+
+
+
 
     res.status(201).json({ id: resultado.lastID });
   });
@@ -283,140 +290,147 @@ const codigosRecuperacao = {};
   });
 
   app.post("/exames", async (req, res) => {
-    const {
-      cliente,
-      data,
-
-      longe_od_esferico,
-      longe_od_cilindrico,
-      longe_od_eixo,
-      longe_od_dnp,
-
-      longe_oe_esferico,
-      longe_oe_cilindrico,
-      longe_oe_eixo,
-      longe_oe_dnp,
-
-      perto_od_esferico,
-      perto_od_cilindrico,
-      perto_od_eixo,
-      perto_od_dnp,
-
-      perto_oe_esferico,
-      perto_oe_cilindrico,
-      perto_oe_eixo,
-      perto_oe_dnp,
-
-      adicao,
-      medico,
-      tipo_lente,
-      observacoes,
-
-    } = req.body;
-
-    if (!cliente || !data) {
-      return res.status(400).json({
-        mensagem: "Cliente e data são obrigatórios.",
-      });
-    }
-
-    const resultadoBanco = await db.run(
-  `INSERT INTO exames (
+  const {
     cliente,
     data,
-    status_os,
-
+    criadoPor,
     longe_od_esferico,
     longe_od_cilindrico,
     longe_od_eixo,
     longe_od_dnp,
-
     longe_oe_esferico,
     longe_oe_cilindrico,
     longe_oe_eixo,
     longe_oe_dnp,
-
     perto_od_esferico,
     perto_od_cilindrico,
     perto_od_eixo,
     perto_od_dnp,
-
     perto_oe_esferico,
     perto_oe_cilindrico,
     perto_oe_eixo,
     perto_oe_dnp,
-
     adicao,
+    altura,
     medico,
     tipo_lente,
-    observacoes
-  )
-  VALUES (
-    ?, ?, ?,
-    ?, ?, ?, ?,
-    ?, ?, ?, ?,
-    ?, ?, ?, ?,
-    ?, ?, ?, ?,
-    ?, ?, ?, ?
-  )`,
-  [
-    cliente,
-    data,
-    "Aguardando Lente",
+    observacoes,
+  } = req.body;
 
-    longe_od_esferico || "",
-    longe_od_cilindrico || "",
-    longe_od_eixo || "",
-    longe_od_dnp || "",
+  if (!cliente || !data) {
+    return res.status(400).json({
+      mensagem: "Cliente e data são obrigatórios.",
+    });
+  }
 
-    longe_oe_esferico || "",
-    longe_oe_cilindrico || "",
-    longe_oe_eixo || "",
-    longe_oe_dnp || "",
-
-    perto_od_esferico || "",
-    perto_od_cilindrico || "",
-    perto_od_eixo || "",
-    perto_od_dnp || "",
-
-    perto_oe_esferico || "",
-    perto_oe_cilindrico || "",
-    perto_oe_eixo || "",
-    perto_oe_dnp || "",
-
-    adicao || "",
-    medico || "",
-    tipo_lente || "",
-    observacoes || "",
-  ]
-);
-
-    res.status(201).json({
-      id: resultadoBanco.lastID,
+  const resultadoBanco = await db.run(
+    `INSERT INTO exames (
       cliente,
       data,
-      mensagem: "Receita cadastrada com sucesso.",
-    });
-  });
+      criadoPor,
+      status_os,
+      longe_od_esferico,
+      longe_od_cilindrico,
+      longe_od_eixo,
+      longe_od_dnp,
+      longe_oe_esferico,
+      longe_oe_cilindrico,
+      longe_oe_eixo,
+      longe_oe_dnp,
+      perto_od_esferico,
+      perto_od_cilindrico,
+      perto_od_eixo,
+      perto_od_dnp,
+      perto_oe_esferico,
+      perto_oe_cilindrico,
+      perto_oe_eixo,
+      perto_oe_dnp,
+      adicao,
+      altura,
+      medico,
+      tipo_lente,
+      observacoes
+    )
+    VALUES (
+      ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?, ?
+    )`,
+    [
+      cliente,
+      data,
+      criadoPor || "Sistema",
+      "Aguardando Lente",
+      longe_od_esferico || "",
+      longe_od_cilindrico || "",
+      longe_od_eixo || "",
+      longe_od_dnp || "",
+      longe_oe_esferico || "",
+      longe_oe_cilindrico || "",
+      longe_oe_eixo || "",
+      longe_oe_dnp || "",
+      perto_od_esferico || "",
+      perto_od_cilindrico || "",
+      perto_od_eixo || "",
+      perto_od_dnp || "",
+      perto_oe_esferico || "",
+      perto_oe_cilindrico || "",
+      perto_oe_eixo || "",
+      perto_oe_dnp || "",
+      adicao || "",
+      altura || "",
+      medico || "",
+      tipo_lente || "",
+      observacoes || "",
+    ]
+  );
 
-  app.put("/exames/:id/status", async (req, res) => {
+  const agora = new Date();
+
+  await db.run(
+    "INSERT INTO logs (usuario, acao, data, hora) VALUES (?, ?, ?, ?)",
+    [
+      criadoPor || "Sistema",
+      `Cadastrou exame/O.S para ${cliente}`,
+      agora.toLocaleDateString("pt-BR"),
+      agora.toLocaleTimeString("pt-BR"),
+    ]
+  );
+
+  res.status(201).json({
+    id: resultadoBanco.lastID,
+    cliente,
+    data,
+    mensagem: "Receita cadastrada com sucesso.",  
+  });
+});
+
+app.put("/exames/:id/status", async (req, res) => {
   const { id } = req.params;
   const { status_os } = req.body;
 
-  await db.run(
-    "UPDATE exames SET status_os = ? WHERE id = ?",
-    [status_os, id]
-  );
+  await db.run("UPDATE exames SET status_os = ? WHERE id = ?", [
+    status_os,
+    id,
+  ]);
 
   res.json({
     mensagem: "Status da O.S atualizado com sucesso.",
   });
 });
 
-  app.delete("/exames/:id", async (req, res) => {
-    await db.run("DELETE FROM exames WHERE id = ?", [req.params.id]);
-    res.json({ mensagem: "Exame removido com sucesso." });
+app.delete("/exames/:id", async (req, res) => {
+  const { id } = req.params;
+
+  await db.run("DELETE FROM exames WHERE id = ?", [id]);
+
+  res.json({
+    mensagem: "Exame removido com sucesso.",
   });
+});
 
   // USUÁRIOS
   app.get("/usuarios", async (req, res) => {
@@ -428,56 +442,83 @@ const codigosRecuperacao = {};
   });
 
   app.post("/usuarios", async (req, res) => {
-    const { nome, email, senha, tipo } = req.body;
-    const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    const senhaCriptografada = await bcrypt.hash(senha, 10);
+  const { nome, email, tipo } = req.body;
 
-if (!emailValido) {
-  return res.status(400).json({
-    mensagem: "Informe um e-mail válido.",
-  });
-}
-
-    if (!nome || !email || !senha) {
-      return res.status(400).json({
-        mensagem: "Nome, e-mail e senha são obrigatórios.",
-      });
-    }
-
-    try {
-      const resultado = await db.run(
-  "INSERT INTO usuarios (nome, email, senha, tipo) VALUES (?, ?, ?, ?)",
-  [
-    nome,
-    email.toLowerCase().trim(),
-    senhaCriptografada,
-    tipo || "admin",
-  ]
-);
-
-      res.status(201).json({
-        id: resultado.lastID,
-        nome,
-        email,
-        tipo: tipo || "admin",
-      });
-    } catch (error) {
-      res.status(400).json({
-        mensagem: "Este e-mail já está cadastrado.",
-      });
-    }
-  });
-
-  app.delete("/usuarios/:id", async (req, res) => {
-    await db.run("DELETE FROM usuarios WHERE id = ?", [req.params.id]);
-
-    res.json({
-      mensagem: "Usuário removido com sucesso.",
+  if (!nome || !email) {
+    return res.status(400).json({
+      mensagem: "Nome e e-mail são obrigatórios.",
     });
-  });
+  }
+
+  const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  if (!emailValido) {
+    return res.status(400).json({
+      mensagem: "Informe um e-mail válido.",
+    });
+  }
+
+  const emailFormatado = email.toLowerCase().trim();
+  const token = crypto.randomBytes(32).toString("hex");
+  const tokenExpiraEm = Date.now() + 24 * 60 * 60 * 1000;
+
+  try {
+    const resultado = await db.run(
+      `INSERT INTO usuarios 
+      (nome, email, senha, tipo, email_confirmado, token_confirmacao, token_expira_em, primeiro_acesso)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        nome,
+        emailFormatado,
+        "",
+        tipo || "funcionario",
+        0,
+        token,
+        tokenExpiraEm,
+        1,
+      ]
+    );
+
+    const link = `${process.env.FRONTEND_URL}/criar-senha?token=${token}`;
+
+    await transportadorEmail.sendMail({
+      from: `"IL Ótica Sistema" <${process.env.EMAIL_USER}>`,
+      to: emailFormatado,
+      subject: "Convite de acesso - IL Ótica",
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 24px;">
+          <h2>IL Ótica</h2>
+          <p>Olá, ${nome}!</p>
+          <p>Você recebeu um convite para acessar o sistema da IL Ótica.</p>
+          <p>Clique no botão abaixo para criar sua senha:</p>
+
+          <a href="${link}" 
+             style="display:inline-block;padding:12px 20px;background:#1d4ed8;color:white;text-decoration:none;border-radius:8px;font-weight:bold;">
+            Criar minha senha
+          </a>
+
+          <p>Este link expira em 24 horas.</p>
+          <p>Se você não esperava este convite, ignore este e-mail.</p>
+        </div>
+      `,
+    });
+
+    res.status(201).json({
+      id: resultado.lastID,
+      nome,
+      email: emailFormatado,
+      tipo: tipo || "funcionario",
+      mensagem: "Convite enviado para o e-mail do usuário.",
+    });
+  } catch (error) {
+    res.status(400).json({
+      mensagem: "Este e-mail já está cadastrado.",
+    });
+  }
+});
 
   // LOGIN
-  app.post("/login", async (req, res) => {
+app.post("/login", async (req, res) => {
   const { email, senha } = req.body;
 
   if (!email || !senha) {
@@ -488,10 +529,9 @@ if (!emailValido) {
 
   const emailFormatado = email.toLowerCase().trim();
 
-  const usuario = await db.get(
-    "SELECT * FROM usuarios WHERE email = ?",
-    [emailFormatado]
-  );
+  const usuario = await db.get("SELECT * FROM usuarios WHERE email = ?", [
+    emailFormatado,
+  ]);
 
   if (!usuario) {
     return res.status(401).json({
@@ -499,29 +539,26 @@ if (!emailValido) {
     });
   }
 
+  if (usuario.email_confirmado === 0) {
+  return res.status(403).json({
+    mensagem: "Confirme seu e-mail para acessar o sistema.",
+  });
+}
+
   let senhaCorreta = false;
 
-  if (
-    usuario.senha.startsWith("$2a$") ||
-    usuario.senha.startsWith("$2b$")
-  ) {
-    senhaCorreta = await bcrypt.compare(
-      senha,
-      usuario.senha
-    );
+  if (usuario.senha.startsWith("$2a$") || usuario.senha.startsWith("$2b$")) {
+    senhaCorreta = await bcrypt.compare(senha, usuario.senha);
   } else {
     senhaCorreta = usuario.senha === senha;
 
     if (senhaCorreta) {
-      const senhaNovaCriptografada = await bcrypt.hash(
-        senha,
-        10
-      );
+      const senhaNovaCriptografada = await bcrypt.hash(senha, 10);
 
-      await db.run(
-        "UPDATE usuarios SET senha = ? WHERE id = ?",
-        [senhaNovaCriptografada, usuario.id]
-      );
+      await db.run("UPDATE usuarios SET senha = ? WHERE id = ?", [
+        senhaNovaCriptografada,
+        usuario.id,
+      ]);
     }
   }
 
@@ -542,31 +579,49 @@ if (!emailValido) {
   });
 });
 
-  // DADOS DA LOJA
-  app.get("/loja", async (req, res) => {
-    const loja = await db.get("SELECT * FROM loja WHERE id = 1");
-    res.json(loja);
+// LOJA
+
+app.get("/loja", async (req, res) => {
+  const loja = await db.get(
+    "SELECT * FROM loja WHERE id = 1"
+  );
+
+  res.json(loja);
+});
+
+app.put("/loja", async (req, res) => {
+  const {
+    nome,
+    cnpj,
+    telefone,
+    endereco,
+    instagram,
+    horario,
+  } = req.body;
+
+  await db.run(
+    `UPDATE loja SET
+      nome = ?,
+      cnpj = ?,
+      telefone = ?,
+      endereco = ?,
+      instagram = ?,
+      horario = ?
+    WHERE id = 1`,
+    [
+      nome,
+      cnpj,
+      telefone,
+      endereco,
+      instagram,
+      horario,
+    ]
+  );
+
+  res.json({
+    mensagem: "Dados da loja atualizados."
   });
-
-  app.put("/loja", async (req, res) => {
-    const { nome, cnpj, telefone, endereco, instagram, horario } = req.body;
-
-    await db.run(
-      `UPDATE loja SET
-        nome = ?,
-        cnpj = ?,
-        telefone = ?,
-        endereco = ?,
-        instagram = ?,
-        horario = ?
-      WHERE id = 1`,
-      [nome, cnpj, telefone, endereco, instagram, horario]
-    );
-
-    res.json({
-      mensagem: "Dados da loja atualizados com sucesso.",
-    });
-  });
+});
 
   // BACKUP
   app.get("/backup", (req, res) => {
@@ -581,86 +636,87 @@ if (!emailValido) {
     });
   });
 
+  // LOGS
   app.get("/logs", async (req, res) => {
-  const logs = await db.all("SELECT * FROM logs ORDER BY id DESC");
-  res.json(logs);
-});
-
-app.post("/logs", async (req, res) => {
-  const { usuario, acao } = req.body;
-
-  const agora = new Date();
-
-  const data = agora.toLocaleDateString("pt-BR");
-  const hora = agora.toLocaleTimeString("pt-BR");
-
-  await db.run(
-    "INSERT INTO logs (usuario, acao, data, hora) VALUES (?, ?, ?, ?)",
-    [usuario || "Sistema", acao, data, hora]
-  );
-
-  res.status(201).json({
-    mensagem: "Log registrado com sucesso.",
+    const logs = await db.all("SELECT * FROM logs ORDER BY id DESC");
+    res.json(logs);
   });
-});
 
-// AGENDA
-app.get("/agenda", async (req, res) => {
-  const agenda = await db.all("SELECT * FROM agenda ORDER BY data ASC, hora ASC");
-  res.json(agenda);
-});
+  app.post("/logs", async (req, res) => {
+    const { usuario, acao } = req.body;
 
-app.post("/agenda", async (req, res) => {
-  const { cliente, telefone, data, hora, observacoes, status } = req.body;
+    const agora = new Date();
+    const data = agora.toLocaleDateString("pt-BR");
+    const hora = agora.toLocaleTimeString("pt-BR");
 
-  if (!cliente || !data || !hora) {
-    return res.status(400).json({
-      mensagem: "Cliente, data e hora são obrigatórios.",
+    await db.run(
+      "INSERT INTO logs (usuario, acao, data, hora) VALUES (?, ?, ?, ?)",
+      [usuario || "Sistema", acao, data, hora]
+    );
+
+    res.status(201).json({
+      mensagem: "Log registrado com sucesso.",
     });
-  }
-
-  const resultado = await db.run(
-    `INSERT INTO agenda
-    (cliente, telefone, data, hora, observacoes, status)
-    VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      cliente,
-      telefone || "",
-      data,
-      hora,
-      observacoes || "",
-      status || "Agendado",
-    ]
-  );
-
-  res.status(201).json({
-    id: resultado.lastID,
-    mensagem: "Agendamento criado com sucesso.",
   });
-});
 
-app.put("/agenda/:id/status", async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body;
-
-  await db.run("UPDATE agenda SET status = ? WHERE id = ?", [status, id]);
-
-  res.json({
-    mensagem: "Status do agendamento atualizado.",
+  // AGENDA
+  app.get("/agenda", async (req, res) => {
+    const agenda = await db.all(
+      "SELECT * FROM agenda ORDER BY data ASC, hora ASC"
+    );
+    res.json(agenda);
   });
-});
 
-app.delete("/agenda/:id", async (req, res) => {
-  const { id } = req.params;
+  app.post("/agenda", async (req, res) => {
+    const { cliente, telefone, data, hora, observacoes, status } = req.body;
 
-  await db.run("DELETE FROM agenda WHERE id = ?", [id]);
+    if (!cliente || !data || !hora) {
+      return res.status(400).json({
+        mensagem: "Cliente, data e hora são obrigatórios.",
+      });
+    }
 
-  res.json({
-    mensagem: "Agendamento removido com sucesso.",
+    const resultado = await db.run(
+      `INSERT INTO agenda
+      (cliente, telefone, data, hora, observacoes, status)
+      VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        cliente,
+        telefone || "",
+        data,
+        hora,
+        observacoes || "",
+        status || "Agendado",
+      ]
+    );
+
+    res.status(201).json({
+      id: resultado.lastID,
+      mensagem: "Agendamento criado com sucesso.",
+    });
   });
-});
 
-app.post("/enviar-codigo-recuperacao", async (req, res) => {
+  app.put("/agenda/:id/status", async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    await db.run("UPDATE agenda SET status = ? WHERE id = ?", [status, id]);
+
+    res.json({
+      mensagem: "Status do agendamento atualizado.",
+    });
+  });
+
+  app.delete("/agenda/:id", async (req, res) => {
+    await db.run("DELETE FROM agenda WHERE id = ?", [req.params.id]);
+
+    res.json({
+      mensagem: "Agendamento removido com sucesso.",
+    });
+  });
+
+  // RECUPERAÇÃO DE SENHA
+ app.post("/enviar-codigo-recuperacao", async (req, res) => {
   const { email } = req.body;
 
   if (!email) {
@@ -671,13 +727,20 @@ app.post("/enviar-codigo-recuperacao", async (req, res) => {
 
   const emailFormatado = email.toLowerCase().trim();
 
-  const usuario = await db.get("SELECT * FROM usuarios WHERE email = ?", [
-    emailFormatado,
-  ]);
+  const usuario = await db.get(
+    "SELECT * FROM usuarios WHERE email = ?",
+    [emailFormatado]
+  );
 
   if (!usuario) {
     return res.status(404).json({
-      mensagem: "E-mail não encontrado.",
+      mensagem: "Este e-mail não está cadastrado no sistema.",
+    });
+  }
+
+  if (usuario.email_confirmado === 0) {
+    return res.status(403).json({
+      mensagem: "Este e-mail ainda não foi confirmado.",
     });
   }
 
@@ -705,83 +768,134 @@ app.post("/enviar-codigo-recuperacao", async (req, res) => {
   });
 
   res.json({
-    mensagem: "Código enviado para o e-mail.",
+    mensagem: "Código enviado para o e-mail cadastrado.",
   });
 });
 
-app.post("/recuperar-senha", async (req, res) => {
-  const { email, codigo, novaSenha } = req.body;
+  app.get("/validar-convite/:token", async (req, res) => {
+  const { token } = req.params;
 
-  if (!email || !codigo || !novaSenha) {
-    return res.status(400).json({
-      mensagem: "Informe e-mail, código e nova senha.",
+  const usuario = await db.get(
+    "SELECT id, nome, email, tipo, token_expira_em FROM usuarios WHERE token_confirmacao = ?",
+    [token]
+  );
+
+  if (!usuario) {
+    return res.status(404).json({
+      mensagem: "Convite inválido.",
     });
   }
 
-  const emailFormatado = email.toLowerCase().trim();
-  const recuperacao = codigosRecuperacao[emailFormatado];
-
-  if (!recuperacao) {
+  if (Date.now() > usuario.token_expira_em) {
     return res.status(400).json({
-      mensagem: "Código não solicitado ou expirado.",
+      mensagem: "Convite expirado.",
     });
   }
 
-  if (Date.now() > recuperacao.expiraEm) {
-    delete codigosRecuperacao[emailFormatado];
+  res.json(usuario);
+});
 
+app.post("/criar-senha", async (req, res) => {
+  const { token, senha } = req.body;
+
+  if (!token || !senha) {
     return res.status(400).json({
-      mensagem: "Código expirado. Solicite um novo código.",
+      mensagem: "Token e senha são obrigatórios.",
     });
   }
 
-  if (recuperacao.codigo !== codigo) {
+  if (senha.length < 6) {
     return res.status(400).json({
-      mensagem: "Código inválido.",
+      mensagem: "A senha precisa ter pelo menos 6 caracteres.",
     });
   }
 
-  const senhaCriptografada = await bcrypt.hash(
-  novaSenha,
-  10
-);
+  const usuario = await db.get(
+    "SELECT * FROM usuarios WHERE token_confirmacao = ?",
+    [token]
+  );
 
-await db.run(
-  "UPDATE usuarios SET senha = ? WHERE email = ?",
-  [senhaCriptografada, emailFormatado]
-);
+  if (!usuario) {
+    return res.status(404).json({
+      mensagem: "Convite inválido.",
+    });
+  }
 
-  delete codigosRecuperacao[emailFormatado];
+  if (Date.now() > usuario.token_expira_em) {
+    return res.status(400).json({
+      mensagem: "Convite expirado.",
+    });
+  }
+
+  const senhaCriptografada = await bcrypt.hash(senha, 10);
+
+  await db.run(
+    `UPDATE usuarios SET 
+      senha = ?,
+      email_confirmado = 1,
+      token_confirmacao = NULL,
+      token_expira_em = NULL,
+      primeiro_acesso = 0
+    WHERE id = ?`,
+    [senhaCriptografada, usuario.id]
+  );
 
   res.json({
-    mensagem: "Senha alterada com sucesso.",
+    mensagem: "Senha criada com sucesso.",
   });
 });
-app.post("/teste-email", async (req, res) => {
-  const { email } = req.body;
 
-  try {
-    await transportadorEmail.sendMail({
-      from: `"IL Ótica Sistema" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "Teste de envio - IL Ótica",
-      html: `
-        <h2>IL Ótica</h2>
-        <p>Este é um teste de envio de e-mail pelo sistema.</p>
-        <p>Se você recebeu este e-mail, a configuração funcionou.</p>
-      `,
-    });
+// DELETAR USUÁRIO
+app.delete("/usuarios/:id", async (req, res) => {
+  const { id } = req.params;
+  const { usuarioLogadoId } = req.body;
 
-    res.json({
-      mensagem: "E-mail enviado com sucesso.",
-    });
-  } catch (error) {
-    console.log(error);
-
-    res.status(500).json({
-      mensagem: "Erro ao enviar e-mail.",
+  if  (Number(id) === Number(usuarioLogadoId)) {
+    return res.status(400).json({
+      mensagem: "Você não pode deletar seu próprio usuário.",
     });
   }
+
+  await db.run("DELETE FROM usuarios WHERE id = ?", [id]);
+
+  res.json({
+    mensagem: "Usuário removido com sucesso.",
+  });
+});
+
+// HISTÓRICO DO CLIENTE POR ID
+app.get("/clientes/:id/historico", async (req, res) => {
+  const { id } = req.params;
+
+  const cliente = await db.get("SELECT * FROM clientes WHERE id = ?", [id]);
+
+  if (!cliente) {
+    return res.status(404).json({
+      mensagem: "Cliente não encontrado.",
+    });
+  }
+
+  const vendas = await db.all(
+    "SELECT * FROM vendas WHERE cliente = ? ORDER BY id DESC",
+    [cliente.nome]
+  );
+
+  const exames = await db.all(
+    "SELECT * FROM exames WHERE cliente = ? ORDER BY id DESC",
+    [cliente.nome]
+  );
+
+  const totalGasto = vendas.reduce(
+    (total, venda) => total + Number(venda.valorTotal),
+    0
+  );
+
+  res.json({
+    cliente,
+    vendas,
+    exames,
+    totalGasto,
+  });
 });
 
   app.listen(3000, () => {

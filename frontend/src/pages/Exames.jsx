@@ -3,7 +3,7 @@ import jsPDF from "jspdf";
 import api from "../services/api";
 import logo from "../assets/logo-ilotica.png";
 
-function Exames() {
+function Exames({ usuarioLogado }) {
   const [aba, setAba] = useState("nova");
   const [exames, setExames] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -33,6 +33,7 @@ function Exames() {
   const [pertoOeDnp, setPertoOeDnp] = useState("");
 
   const [adicao, setAdicao] = useState("");
+  const [altura, setAltura] = useState("");
   const [medico, setMedico] = useState("");
   const [tipoLente, setTipoLente] = useState("");
   const [observacoes, setObservacoes] = useState("");
@@ -74,6 +75,7 @@ function Exames() {
     setPertoOeDnp("");
 
     setAdicao("");
+    setAltura("");
     setMedico("");
     setTipoLente("");
     setObservacoes("");
@@ -88,6 +90,7 @@ function Exames() {
     await api.post("/exames", {
       cliente,
       data,
+      criadoPor: usuarioLogado?.nome || "Administrador",
 
       longe_od_esferico: longeOdEsferico,
       longe_od_cilindrico: longeOdCilindrico,
@@ -110,6 +113,7 @@ function Exames() {
       perto_oe_dnp: pertoOeDnp,
 
       adicao,
+      altura,
       medico,
       tipo_lente: tipoLente,
       observacoes,
@@ -192,8 +196,10 @@ Rua João de Brito Lima Moura, 123
     pdf.setFontSize(10);
 
     pdf.text(`ADIÇÃO: ${exame.adicao || ""}`, 15, 150);
-    pdf.text(`MÉDICO: ${exame.medico || ""}`, 105, 150);
+    pdf.text(`ALTURA: ${exame.altura || ""}`, 70, 150);
+    pdf.text(`MÉDICO: ${exame.medico || ""}`, 125, 150);
 
+    
     pdf.text(`CLIENTE: ${exame.cliente}`, 15, 166);
     pdf.text(`TIPO DE LENTE: ${exame.tipo_lente || ""}`, 15, 182);
     pdf.text(`DATA: ${exame.data}`, 15, 198);
@@ -308,6 +314,7 @@ Rua João de Brito Lima Moura, 123
     id: exames.length + 1,
     cliente,
     data,
+    criadoPor: usuarioLogado?.nome || "Administrador",
 
     longe_od_esferico: longeOdEsferico,
     longe_od_cilindrico: longeOdCilindrico,
@@ -330,6 +337,7 @@ Rua João de Brito Lima Moura, 123
     perto_oe_dnp: pertoOeDnp,
 
     adicao,
+    altura,
     medico,
     tipo_lente: tipoLente,
     observacoes,
@@ -431,19 +439,24 @@ Rua João de Brito Lima Moura, 123
                   value={adicao}
                   onChange={(e) => setAdicao(e.target.value)}
                 />
-
+                <input
+                  placeholder="Altura (mm)"
+                  value={altura}
+                  onChange={(e) => setAltura(e.target.value)}
+                />
                 <input
                   placeholder="Médico"
                   value={medico}
                   onChange={(e) => setMedico(e.target.value)}
                 />
-
                 <input
                   placeholder="Tipo de lente"
                   value={tipoLente}
                   onChange={(e) => setTipoLente(e.target.value)}
                 />
               </div>
+
+              
 
               <textarea
                 placeholder="Observações"
@@ -486,6 +499,7 @@ Rua João de Brito Lima Moura, 123
                   <span>Data: {exame.data}</span>
                   <span>Médico: {exame.medico || "Não informado"}</span>
                   <span>Tipo de lente: {exame.tipo_lente || "Não informado"}</span>
+                  <span> cadastrado por: {exame.criadoPor || "Sistema"}</span>
                   <div className="status-os-area">
   <span
     className={`status-os ${
@@ -658,6 +672,7 @@ function PreviewOS({ exame, logo }) {
 
         <div className="os-info">
           <span>ADIÇÃO: {exame.adicao || "________"}</span>
+          <span>ALTURA: {exame.altura || "________"}</span>
           <span>MÉDICO: {exame.medico || "________"}</span>
           <span>CLIENTE: {exame.cliente || "________"}</span>
           <span>TIPO DE LENTE: {exame.tipo_lente || "________"}</span>

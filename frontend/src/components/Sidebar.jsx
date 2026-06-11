@@ -8,6 +8,13 @@ function Sidebar({
   podeVerConfiguracoes,
   sair,
 }) {
+  const tipoFormatado =
+    usuarioLogado?.tipo === "admin"
+      ? "Administrador"
+      : usuarioLogado?.tipo === "suporte"
+      ? "Suporte"
+      : "Funcionário";
+
   return (
     <aside className="sidebar">
       <div>
@@ -78,23 +85,29 @@ function Sidebar({
         </nav>
       </div>
 
-      <div className="sidebar-user">
-        <div className="user-avatar">
-          {usuarioLogado?.nome?.charAt(0)?.toUpperCase()}
+      <div>
+        <div className="sidebar-profile">
+          <div className="profile-top">
+            <div className="profile-avatar">
+              {usuarioLogado?.nome?.charAt(0)?.toUpperCase()}
+            </div>
+          </div>
+
+          <strong>{usuarioLogado?.nome}</strong>
+
+          <span>{tipoFormatado}</span>
+
+          <small>
+            <i></i>
+            Online
+          </small>
         </div>
 
-        <div className="user-info">
-          <strong>{usuarioLogado.nome}</strong>
-          <span>
-            {usuarioLogado.tipo === "admin"
-              ? "Administrador"
-              : usuarioLogado.tipo === "suporte"
-              ? "Suporte"
-              : "Funcionário"}
-          </span>
-        </div>
-
-        <button type="button" onClick={sair}>
+        <button
+          type="button"
+          className="sidebar-logout"
+          onClick={sair}
+        >
           Sair do Sistema
         </button>
       </div>

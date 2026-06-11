@@ -16,7 +16,8 @@ async function conectarBanco() {
       cpf TEXT,
       nascimento TEXT,
       endereco TEXT,
-      observacoes TEXT
+      observacoes TEXT,
+      foto TEXT
     );
 
     CREATE TABLE IF NOT EXISTS produtos (
@@ -37,7 +38,8 @@ async function conectarBanco() {
       valorTotal REAL NOT NULL,
       formaPagamento TEXT NOT NULL,
       status TEXT DEFAULT 'Orçamento',
-      data TEXT
+      data TEXT,
+      usuario TEXT
     );
 
     CREATE TABLE IF NOT EXISTS exames (
@@ -45,27 +47,22 @@ async function conectarBanco() {
       cliente TEXT NOT NULL,
       data TEXT NOT NULL,
       status_os TEXT DEFAULT 'Aguardando Lente',
-
       longe_od_esferico TEXT,
       longe_od_cilindrico TEXT,
       longe_od_eixo TEXT,
       longe_od_dnp TEXT,
-
       longe_oe_esferico TEXT,
       longe_oe_cilindrico TEXT,
       longe_oe_eixo TEXT,
       longe_oe_dnp TEXT,
-
       perto_od_esferico TEXT,
       perto_od_cilindrico TEXT,
       perto_od_eixo TEXT,
       perto_od_dnp TEXT,
-
       perto_oe_esferico TEXT,
       perto_oe_cilindrico TEXT,
       perto_oe_eixo TEXT,
       perto_oe_dnp TEXT,
-
       adicao TEXT,
       medico TEXT,
       tipo_lente TEXT,
@@ -77,7 +74,11 @@ async function conectarBanco() {
       nome TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
       senha TEXT NOT NULL,
-      tipo TEXT DEFAULT 'admin'
+      tipo TEXT DEFAULT 'admin',
+      email_confirmado INTEGER DEFAULT 1,
+      token_confirmacao TEXT,
+      token_expira_em INTEGER,
+      primeiro_acesso INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS loja (
@@ -116,6 +117,13 @@ async function conectarBanco() {
   }
 
   await adicionarColuna("produtos", "estoque_minimo", "INTEGER DEFAULT 5");
+  await adicionarColuna("vendas", "usuario", "TEXT");
+  await adicionarColuna("clientes", "foto", "TEXT");
+
+  await adicionarColuna("usuarios", "email_confirmado", "INTEGER DEFAULT 1");
+  await adicionarColuna("usuarios", "token_confirmacao", "TEXT");
+  await adicionarColuna("usuarios", "token_expira_em", "INTEGER");
+  await adicionarColuna("usuarios", "primeiro_acesso", "INTEGER DEFAULT 0");
 
   await adicionarColuna("exames", "status_os", "TEXT DEFAULT 'Aguardando Lente'");
   await adicionarColuna("exames", "longe_od_esferico", "TEXT");
@@ -137,22 +145,21 @@ async function conectarBanco() {
   await adicionarColuna("exames", "adicao", "TEXT");
   await adicionarColuna("exames", "medico", "TEXT");
   await adicionarColuna("exames", "tipo_lente", "TEXT");
+  await adicionarColuna("clientes", "criadoPor", "TEXT");
+  await adicionarColuna("vendas", "desconto", "REAL DEFAULT 0");
+  await adicionarColuna("vendas", "valorPago", "REAL DEFAULT 0");
+  await adicionarColuna("vendas", "valorRestante", "REAL DEFAULT 0");
+  await adicionarColuna("exames", "altura", "TEXT");
+  await adicionarColuna("exames", "criadoPor", "TEXT");
 
-  const usuarioPadrao = await db.get("SELECT * FROM usuarios WHERE email = ?", [
-    "dono@ilotica.com",
-  ]);
 
-  if (!usuarioPadrao) {
-    await db.run(
-      "INSERT INTO usuarios (nome, email, senha, tipo) VALUES (?, ?, ?, ?)",
-      ["Dono", "dono@ilotica.com", "123456", "admin"]
-    );
 
-    await db.run(
-      "INSERT INTO usuarios (nome, email, senha, tipo) VALUES (?, ?, ?, ?)",
-      ["Dona", "dona@ilotica.com", "123456", "admin"]
-    );
-  }
+  await db.run(`
+    UPDATE usuarios 
+    SET email_confirmado = 1, primeiro_acesso = 0
+    WHERE email_confirmado IS NULL
+  `);
+
 
   const lojaPadrao = await db.get("SELECT * FROM loja WHERE id = 1");
 
@@ -171,6 +178,28 @@ async function conectarBanco() {
       ]
     );
   }
+
+  const adminExiste = await db.get(
+  "SELECT * FROM usuarios WHERE tipo = 'admin'"
+);
+
+if (!adminExiste) {
+  await db.run(
+    `INSERT INTO usuarios
+    (nome, email, senha, tipo, email_confirmado, primeiro_acesso)
+    VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      "Administrador",
+      "matheusoaress2020@gmail.com",
+      "123456",
+      "admin",
+      1,
+      0,
+    ]
+  );
+
+  console.log("ADMIN RECUPERADO COM SUCESSO");
+}
 
   return db;
 }

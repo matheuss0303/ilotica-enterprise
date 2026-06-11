@@ -11,11 +11,17 @@ import Login from "./pages/Login";
 import Configuracoes from "./pages/Configuracoes";
 import Financeiro from "./pages/Financeiro";
 import Agenda from "./pages/Agenda";
-
+import CriarSenha from "./pages/CriarSenha";
 
 function App() {
   const [pagina, setPagina] = useState("dashboard");
   const [usuarioLogado, setUsuarioLogado] = useState(null);
+
+  const rotaAtual = window.location.pathname;
+
+  if (rotaAtual === "/criar-senha") {
+    return <CriarSenha />;
+  }
 
   if (!usuarioLogado) {
     return <Login setUsuarioLogado={setUsuarioLogado} />;
@@ -27,7 +33,6 @@ function App() {
   const podeVerConfiguracoes =
     tipoUsuario === "admin" || tipoUsuario === "suporte";
 
-
   function sair() {
     setUsuarioLogado(null);
     setPagina("dashboard");
@@ -36,21 +41,21 @@ function App() {
   return (
     <div className="app">
       <Sidebar
-  pagina={pagina}
-  setPagina={setPagina}
-  usuarioLogado={usuarioLogado}
-  podeVerFinanceiro={podeVerFinanceiro}
-  podeVerConfiguracoes={podeVerConfiguracoes}
-  sair={sair}
-/>
+        pagina={pagina}
+        setPagina={setPagina}
+        usuarioLogado={usuarioLogado}
+        podeVerFinanceiro={podeVerFinanceiro}
+        podeVerConfiguracoes={podeVerConfiguracoes}
+        sair={sair}
+      />
 
       <main className="content">
-        {pagina === "dashboard" && <Dashboard />}
-        {pagina === "clientes" && <Clientes />}
-        {pagina === "agenda" && <Agenda />}
-        {pagina === "exames" && <Exames />}
+        {pagina === "dashboard" && <Dashboard usuarioLogado={usuarioLogado} />}
+        {pagina === "clientes" && <Clientes usuarioLogado={usuarioLogado} />}
+        {pagina === "agenda" && <Agenda usuarioLogado={usuarioLogado} />}
+        {pagina === "exames" && <Exames usuarioLogado={usuarioLogado} />}
         {pagina === "produtos" && <Produtos />}
-        {pagina === "vendas" && <Vendas />}
+        {pagina === "vendas" && <Vendas usuarioLogado={usuarioLogado} />}
 
         {pagina === "financeiro" &&
           (podeVerFinanceiro ? <Financeiro /> : <AcessoNegado />)}

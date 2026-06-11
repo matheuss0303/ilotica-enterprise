@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import api from "../services/api";
 import HistoricoCliente from "./HistoricoCliente";
 
-function Clientes() {
+function Clientes({ usuarioLogado }) {
   const [aba, setAba] = useState("novo");
   const [clientes, setClientes] = useState([]);
   const [historico, setHistorico] = useState(null);
@@ -16,6 +16,7 @@ function Clientes() {
   const [nascimento, setNascimento] = useState("");
   const [endereco, setEndereco] = useState("");
   const [observacoes, setObservacoes] = useState("");
+  const [foto, setFoto] = useState("");
   const [busca, setBusca] = useState("");
 
   useEffect(() => {
@@ -35,7 +36,22 @@ function Clientes() {
     setNascimento("");
     setEndereco("");
     setObservacoes("");
+    setFoto("");
     setEditandoId(null);
+  }
+
+  function selecionarFoto(event) {
+    const arquivo = event.target.files[0];
+
+    if (!arquivo) return;
+
+    const leitor = new FileReader();
+
+    leitor.onloadend = () => {
+      setFoto(leitor.result);
+    };
+
+    leitor.readAsDataURL(arquivo);
   }
 
   async function salvarCliente() {
@@ -52,6 +68,8 @@ function Clientes() {
       nascimento,
       endereco,
       observacoes,
+      foto,
+      criadoPor: usuarioLogado?.nome || "Não identificado",
     };
 
     if (editandoId) {
@@ -92,6 +110,7 @@ function Clientes() {
     setNascimento(cliente.nascimento || "");
     setEndereco(cliente.endereco || "");
     setObservacoes(cliente.observacoes || "");
+    setFoto(cliente.foto || "");
     setAba("novo");
 
     window.scrollTo({
@@ -100,19 +119,17 @@ function Clientes() {
     });
   }
 
-  async function verHistorico(nomeCliente) {
-    try {
-      const resposta = await api.get(
-        `/clientes/${encodeURIComponent(nomeCliente)}/historico`
-      );
+  async function verHistorico(idCliente) {
+  try {
+    const resposta = await api.get(`/clientes/${idCliente}/historico`);
 
-      setHistorico(resposta.data);
-      setMostrarHistorico(true);
-      setAba("historico");
-    } catch (error) {
-      alert("Erro ao carregar histórico do cliente.");
-    }
+    setHistorico(resposta.data);
+    setMostrarHistorico(true);
+    setAba("historico");
+  } catch (error) {
+    alert("Erro ao carregar histórico do cliente.");
   }
+}
 
   const clientesFiltrados = clientes.filter((cliente) => {
     const textoBusca = busca.toLowerCase();
@@ -191,6 +208,28 @@ function Clientes() {
             onChange={(e) => setEndereco(e.target.value)}
           />
 
+          <div className="foto-cliente-box">
+            <label>Foto do Cliente</label>
+
+            {foto ? (
+              <img src={foto} alt="Foto do cliente" />
+            ) : (
+              <div className="foto-placeholder">Sem foto</div>
+            )}
+
+            <label className="upload-foto">
+              📷 Escolher Foto
+
+              <input
+              type="file"
+              accept="image/*"
+              onChange={selecionarFoto}
+            />
+            </label>
+
+    
+          </div>
+
           <textarea
             placeholder="Observações sobre o cliente"
             value={observacoes}
@@ -225,7 +264,15 @@ function Clientes() {
               <p>Nenhum cliente encontrado.</p>
             ) : (
               clientesFiltrados.map((cliente) => (
-                <div className="item" key={cliente.id}>
+                <div className="item cliente-card" key={cliente.id}>
+                  <div className="cliente-foto-lista">
+                    {cliente.foto ? (
+                      <img src={cliente.foto} alt={cliente.nome} />
+                    ) : (
+                      <span>{cliente.nome?.charAt(0)?.toUpperCase()}</span>
+                    )}
+                  </div>
+
                   <strong>{cliente.nome}</strong>
                   <span>Telefone: {cliente.telefone}</span>
                   <span>WhatsApp: {cliente.whatsapp || "Não informado"}</span>
@@ -235,6 +282,9 @@ function Clientes() {
                   </span>
                   <span>Endereço: {cliente.endereco || "Não informado"}</span>
                   <small>{cliente.observacoes || "Sem observações"}</small>
+                  <small>
+                    cadastrado por: {cliente.criadoPor || "Sistema"}
+                  </small>
 
                   <button type="button" onClick={() => editarCliente(cliente)}>
                     Editar
@@ -246,7 +296,7 @@ function Clientes() {
 
                   <button
                     type="button"
-                    onClick={() => verHistorico(cliente.nome)}
+                    onClick={() => verHistorico(cliente.id)}
                   >
                     Ver Histórico
                   </button>

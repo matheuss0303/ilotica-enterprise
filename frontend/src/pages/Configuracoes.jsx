@@ -99,7 +99,10 @@ function Configuracoes({ usuarioLogado }) {
   }
 
   async function excluirUsuario(id, nomeUsuario) {
-    await api.delete(`/usuarios/${id}`);
+    await api.delete(`/usuarios/${id}`, {
+      data: { usuarioLogadoId: usuarioLogado.id }
+    });
+    
     await registrarLog(`Excluiu o usuário ${nomeUsuario}`);
     buscarUsuarios();
   }
