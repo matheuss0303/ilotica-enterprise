@@ -162,7 +162,7 @@ function Configuracoes({ usuarioLogado }) {
 
               <a
                 className="botao-link"
-                href="http://localhost:3000/backup"
+                href={`${import.meta.env.VITE_API_URL}/backup`}
                 download
                 onClick={() => registrarLog("Realizou backup do sistema")}
               >
