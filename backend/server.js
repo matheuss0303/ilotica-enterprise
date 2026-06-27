@@ -35,6 +35,14 @@ async function iniciarServidor() {
     });
   });
 
+  app.get("/", (req, res) => {
+  res.json({
+    sistema: "IL Ótica",
+    status: "online",
+    banco: "SQLite conectado",
+  });
+});
+
   // CLIENTES
   app.get("/clientes", async (req, res) => {
     const clientes = await db.all("SELECT * FROM clientes ORDER BY id DESC");
@@ -899,9 +907,12 @@ app.get("/clientes/:id/historico", async (req, res) => {
 });
 
 
-  app.listen(3000, () => {
-    console.log("🚀 Servidor rodando na porta 3000 com SQLite");
-  });
+  const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+  
+});
 }
 
 iniciarServidor();
