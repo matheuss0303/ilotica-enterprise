@@ -5,7 +5,6 @@ const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 
 require("dotenv").config();
-const nodemailer = require("nodemailer");
 
 const app = express();
 
@@ -16,16 +15,6 @@ let db;
 
 async function iniciarServidor() {
   db = await conectarBanco();
-
-  const transportadorEmail = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-
-  const codigosRecuperacao = {};
 
   app.get("/", (req, res) => {
     res.json({
@@ -449,12 +438,12 @@ app.delete("/exames/:id", async (req, res) => {
     res.json(usuarios);
   });
 
-  app.post("/usuarios", async (req, res) => {
-  const { nome, email, tipo } = req.body;
+app.post("/usuarios", async (req, res) => {
+  const { nome, email, senha, tipo } = req.body;
 
-  if (!nome || !email) {
+  if (!nome || !email || !senha) {
     return res.status(400).json({
-      mensagem: "Nome e e-mail são obrigatórios.",
+      mensagem: "Nome, e-mail e senha são obrigatórios.",
     });
   }
 
@@ -467,57 +456,30 @@ app.delete("/exames/:id", async (req, res) => {
   }
 
   const emailFormatado = email.toLowerCase().trim();
-  const token = crypto.randomBytes(32).toString("hex");
-  const tokenExpiraEm = Date.now() + 24 * 60 * 60 * 1000;
+
+  const senhaCriptografada = await bcrypt.hash(senha, 10);
 
   try {
     const resultado = await db.run(
-      `INSERT INTO usuarios 
-      (nome, email, senha, tipo, email_confirmado, token_confirmacao, token_expira_em, primeiro_acesso)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO usuarios
+      (nome, email, senha, tipo)
+      VALUES (?, ?, ?, ?)`,
       [
         nome,
         emailFormatado,
-        "",
+        senhaCriptografada,
         tipo || "funcionario",
-        0,
-        token,
-        tokenExpiraEm,
-        1,
       ]
     );
-
-    const link = `${process.env.FRONTEND_URL}/criar-senha?token=${token}`;
-
-    await transportadorEmail.sendMail({
-      from: `"IL Ótica Sistema" <${process.env.EMAIL_USER}>`,
-      to: emailFormatado,
-      subject: "Convite de acesso - IL Ótica",
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 24px;">
-          <h2>IL Ótica</h2>
-          <p>Olá, ${nome}!</p>
-          <p>Você recebeu um convite para acessar o sistema da IL Ótica.</p>
-          <p>Clique no botão abaixo para criar sua senha:</p>
-
-          <a href="${link}" 
-             style="display:inline-block;padding:12px 20px;background:#1d4ed8;color:white;text-decoration:none;border-radius:8px;font-weight:bold;">
-            Criar minha senha
-          </a>
-
-          <p>Este link expira em 24 horas.</p>
-          <p>Se você não esperava este convite, ignore este e-mail.</p>
-        </div>
-      `,
-    });
 
     res.status(201).json({
       id: resultado.lastID,
       nome,
       email: emailFormatado,
       tipo: tipo || "funcionario",
-      mensagem: "Convite enviado para o e-mail do usuário.",
+      mensagem: "Usuário criado com sucesso.",
     });
+
   } catch (error) {
     res.status(400).json({
       mensagem: "Este e-mail já está cadastrado.",
@@ -537,9 +499,10 @@ app.post("/login", async (req, res) => {
 
   const emailFormatado = email.toLowerCase().trim();
 
-  const usuario = await db.get("SELECT * FROM usuarios WHERE email = ?", [
-    emailFormatado,
-  ]);
+  const usuario = await db.get(
+    "SELECT * FROM usuarios WHERE email = ?",
+    [emailFormatado]
+  );
 
   if (!usuario) {
     return res.status(401).json({
@@ -547,15 +510,12 @@ app.post("/login", async (req, res) => {
     });
   }
 
-  if (usuario.email_confirmado === 0) {
-  return res.status(403).json({
-    mensagem: "Confirme seu e-mail para acessar o sistema.",
-  });
-}
-
   let senhaCorreta = false;
 
-  if (usuario.senha.startsWith("$2a$") || usuario.senha.startsWith("$2b$")) {
+  if (
+    usuario.senha.startsWith("$2a$") ||
+    usuario.senha.startsWith("$2b$")
+  ) {
     senhaCorreta = await bcrypt.compare(senha, usuario.senha);
   } else {
     senhaCorreta = usuario.senha === senha;
@@ -563,10 +523,10 @@ app.post("/login", async (req, res) => {
     if (senhaCorreta) {
       const senhaNovaCriptografada = await bcrypt.hash(senha, 10);
 
-      await db.run("UPDATE usuarios SET senha = ? WHERE id = ?", [
-        senhaNovaCriptografada,
-        usuario.id,
-      ]);
+      await db.run(
+        "UPDATE usuarios SET senha = ? WHERE id = ?",
+        [senhaNovaCriptografada, usuario.id]
+      );
     }
   }
 
@@ -723,135 +683,7 @@ app.put("/loja", async (req, res) => {
     });
   });
 
-  // RECUPERAÇÃO DE SENHA
- app.post("/enviar-codigo-recuperacao", async (req, res) => {
-  const { email } = req.body;
 
-  if (!email) {
-    return res.status(400).json({
-      mensagem: "Informe o e-mail.",
-    });
-  }
-
-  const emailFormatado = email.toLowerCase().trim();
-
-  const usuario = await db.get(
-    "SELECT * FROM usuarios WHERE email = ?",
-    [emailFormatado]
-  );
-
-  if (!usuario) {
-    return res.status(404).json({
-      mensagem: "Este e-mail não está cadastrado no sistema.",
-    });
-  }
-
-  if (usuario.email_confirmado === 0) {
-    return res.status(403).json({
-      mensagem: "Este e-mail ainda não foi confirmado.",
-    });
-  }
-
-  const codigo = Math.floor(100000 + Math.random() * 900000).toString();
-
-  codigosRecuperacao[emailFormatado] = {
-    codigo,
-    expiraEm: Date.now() + 10 * 60 * 1000,
-  };
-
-  await transportadorEmail.sendMail({
-    from: `"IL Ótica Sistema" <${process.env.EMAIL_USER}>`,
-    to: emailFormatado,
-    subject: "Código de recuperação de senha - IL Ótica",
-    html: `
-      <div style="font-family: Arial, sans-serif; padding: 20px;">
-        <h2>IL Ótica</h2>
-        <p>Você solicitou a recuperação de senha do sistema.</p>
-        <p>Seu código de verificação é:</p>
-        <h1 style="letter-spacing: 4px;">${codigo}</h1>
-        <p>Este código expira em 10 minutos.</p>
-        <p>Se você não solicitou esta alteração, ignore este e-mail.</p>
-      </div>
-    `,
-  });
-
-  res.json({
-    mensagem: "Código enviado para o e-mail cadastrado.",
-  });
-});
-
-  app.get("/validar-convite/:token", async (req, res) => {
-  const { token } = req.params;
-
-  const usuario = await db.get(
-    "SELECT id, nome, email, tipo, token_expira_em FROM usuarios WHERE token_confirmacao = ?",
-    [token]
-  );
-
-  if (!usuario) {
-    return res.status(404).json({
-      mensagem: "Convite inválido.",
-    });
-  }
-
-  if (Date.now() > usuario.token_expira_em) {
-    return res.status(400).json({
-      mensagem: "Convite expirado.",
-    });
-  }
-
-  res.json(usuario);
-});
-
-app.post("/criar-senha", async (req, res) => {
-  const { token, senha } = req.body;
-
-  if (!token || !senha) {
-    return res.status(400).json({
-      mensagem: "Token e senha são obrigatórios.",
-    });
-  }
-
-  if (senha.length < 6) {
-    return res.status(400).json({
-      mensagem: "A senha precisa ter pelo menos 6 caracteres.",
-    });
-  }
-
-  const usuario = await db.get(
-    "SELECT * FROM usuarios WHERE token_confirmacao = ?",
-    [token]
-  );
-
-  if (!usuario) {
-    return res.status(404).json({
-      mensagem: "Convite inválido.",
-    });
-  }
-
-  if (Date.now() > usuario.token_expira_em) {
-    return res.status(400).json({
-      mensagem: "Convite expirado.",
-    });
-  }
-
-  const senhaCriptografada = await bcrypt.hash(senha, 10);
-
-  await db.run(
-    `UPDATE usuarios SET 
-      senha = ?,
-      email_confirmado = 1,
-      token_confirmacao = NULL,
-      token_expira_em = NULL,
-      primeiro_acesso = 0
-    WHERE id = ?`,
-    [senhaCriptografada, usuario.id]
-  );
-
-  res.json({
-    mensagem: "Senha criada com sucesso.",
-  });
-});
 
 // DELETAR USUÁRIO
 app.delete("/usuarios/:id", async (req, res) => {

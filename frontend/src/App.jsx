@@ -11,17 +11,13 @@ import Login from "./pages/Login";
 import Configuracoes from "./pages/Configuracoes";
 import Financeiro from "./pages/Financeiro";
 import Agenda from "./pages/Agenda";
-import CriarSenha from "./pages/CriarSenha";
+
 
 function App() {
   const [pagina, setPagina] = useState("dashboard");
   const [usuarioLogado, setUsuarioLogado] = useState(null);
 
   const rotaAtual = window.location.pathname;
-
-  if (rotaAtual === "/criar-senha") {
-    return <CriarSenha />;
-  }
 
   if (!usuarioLogado) {
     return <Login setUsuarioLogado={setUsuarioLogado} />;
