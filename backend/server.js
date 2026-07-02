@@ -103,6 +103,7 @@ await db.run(
   });
 
   app.post("/produtos", async (req, res) => {
+
     const {
       nome,
       marca,
@@ -179,6 +180,60 @@ await db.run(
     await db.run("DELETE FROM produtos WHERE id = ?", [req.params.id]);
     res.json({ mensagem: "Produto removido com sucesso." });
   });
+
+  // Atualizar cliente
+
+  app.put("/clientes/:id", async (req, res) => {
+    const { id } = req.params;
+    const {
+      nome,
+      telefone,
+      whatsapp,
+      cpf,
+      nascimento,
+      endereco,
+      observacoes,
+      foto,
+    } = req.body;
+
+    await db.run(
+      `UPDATE clientes SET
+        nome = ?,
+        telefone = ?,
+        whatsapp = ?,
+        cpf = ?,
+        nascimento = ?,
+        endereco = ?,
+        observacoes = ?,
+        foto = ?
+      WHERE id = ?`,
+      [
+        nome,
+        telefone,
+        whatsapp,
+        cpf,
+        nascimento,
+        endereco,
+        observacoes,
+        foto,
+        id,
+      ]
+    );
+
+    res.json({ mensagem: "Cliente atualizado com sucesso." });
+  });
+
+  // Excluir cliente
+app.delete("/clientes/:id", async (req, res) => {
+  await db.run(
+    "DELETE FROM clientes WHERE id = ?",
+    [req.params.id]
+  );
+
+  res.json({
+    mensagem: "Cliente removido com sucesso."
+  });
+});
 
   // VENDAS
   app.get("/vendas", async (req, res) => {
