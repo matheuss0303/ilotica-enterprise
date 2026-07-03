@@ -9,13 +9,17 @@ function Vendas({ usuarioLogado }) {
   const [clientes, setClientes] = useState([]);
   const [produtos, setProdutos] = useState([]);
 
+  // Estados do Pedido Geral
   const [cliente, setCliente] = useState("");
-  const [produto, setProduto] = useState("");
-  const [valorTotal, setValorTotal] = useState("");
+  const [carrinho, setCarrinho] = useState([]); // 🆕 Lista de produtos adicionados
   const [desconto, setDesconto] = useState("");
   const [valorPago, setValorPago] = useState("");
   const [formaPagamento, setFormaPagamento] = useState("PIX");
-  const [quantidadeParcelas, setQuantidadeParcelas] = useState("1"); // Novo estado
+  const [quantidadeParcelas, setQuantidadeParcelas] = useState("1");
+
+  // Estados auxiliares para a seleção de itens individuais antes de ir ao carrinho
+  const [produtoSelecionadoId, setProdutoSelecionadoId] = useState(""); // 🆕
+  const [quantidadeItem, setQuantidadeItem] = useState(1); // 🆕
 
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("Todos");
@@ -27,54 +31,100 @@ function Vendas({ usuarioLogado }) {
   }, []);
 
   async function carregarDados() {
-    const clientesResposta = await api.get("/clientes");
-    const produtosResposta = await api.get("/produtos");
-    const vendasResposta = await api.get("/vendas");
+    try {
+      const clientesResposta = await api.get("/clientes");
+      const produtosResposta = await api.get("/produtos");
+      const vendasResposta = await api.get("/vendas");
 
-    setClientes(clientesResposta.data);
-    setProdutos(produtosResposta.data);
-    setVendas(vendasResposta.data);
-  }
-
-  function selecionarProduto(nomeProduto) {
-    setProduto(nomeProduto);
-
-    const produtoEncontrado = produtos.find((item) => item.nome === nomeProduto);
-
-    if (produtoEncontrado) {
-      setValorTotal(produtoEncontrado.precoVenda);
+      setClientes(clientesResposta.data);
+      setProdutos(produtosResposta.data);
+      setVendas(vendasResposta.data);
+    } catch (erro) {
+      console.error("Erro ao carregar dados:", erro);
     }
   }
 
-  const valorFinal = Math.max(
-    Number(valorTotal || 0) - Number(desconto || 0),
-    0
-  );
-
-  const valorRestante = Math.max(
-    valorFinal - Number(valorPago || 0),
-    0
-  );
-
-  async function registrarVenda() {
-    if (!cliente || !produto || !valorTotal) {
-      alert("Preencha cliente, produto e valor.");
+  // 🆕 Adiciona o produto selecionado à lista temporária do carrinho
+  function adicionarAoCarrinho() {
+    if (!produtoSelecionadoId) {
+      alert("Selecione um produto antes de adicionar.");
       return;
     }
 
-    // Encontra o objeto do cliente selecionado para pegar o ID dele
-    const clienteObjeto = clientes.find((c) => c.nome === cliente);
+    const itemEncontrado = produtos.find((p) => String(p.id) === String(produtoSelecionadoId));
+    if (!itemEncontrado) return;
 
+    if (quantidadeItem > itemEncontrado.estoque) {
+      alert(`Quantidade selecionada maior que o estoque disponível (${itemEncontrado.estoque}).`);
+      return;
+    }
+
+    // Se o produto já existir no carrinho, apenas soma a quantidade
+    const itemExistenteIndex = carrinho.findIndex((c) => String(c.id) === String(itemEncontrado.id));
+    if (itemExistenteIndex > -1) {
+      const novoCarrinho = [...carrinho];
+      const novaQtd = novoCarrinho[itemExistenteIndex].quantidade + quantidadeItem;
+      if (novaQtd > itemEncontrado.estoque) {
+        alert(`Somatório excede o estoque disponível (${itemEncontrado.estoque}).`);
+        return;
+      }
+      novoCarrinho[itemExistenteIndex].quantidade = novaQtd;
+      setCarrinho(novoCarrinho);
+    } else {
+      setCarrinho([
+        ...carrinho,
+        {
+          id: itemEncontrado.id,
+          nome: itemEncontrado.nome,
+          precoVenda: Number(itemEncontrado.precoVenda),
+          quantidade: quantidadeItem,
+        },
+      ]);
+    }
+
+    // Reseta seletores de item individual
+    setProdutoSelecionadoId("");
+    setQuantidadeItem(1);
+  }
+
+  // 🆕 Remove um item do carrinho
+  function removerDoCarrinho(indexItem) {
+    setCarrinho(carrinho.filter((_, index) => index !== indexItem));
+  }
+
+  // 🆕 Calcula o valor bruto somando os itens do carrinho
+  const valorTotalBruto = carrinho.reduce(
+    (total, item) => total + item.precoVenda * item.quantidade,
+    0
+  );
+
+  const valorFinal = Math.max(valorTotalBruto - Number(desconto || 0), 0);
+  const valorRestante = Math.max(valorFinal - Number(valorPago || 0), 0);
+
+  async function registrarVenda() {
+    if (!cliente) {
+      alert("Selecione um cliente.");
+      return;
+    }
+    if (carrinho.length === 0) {
+      alert("Adicione pelo menos um produto ao carrinho.");
+      return;
+    }
+
+    const clienteObjeto = clientes.find((c) => c.nome === cliente);
     if (formaPagamento === "Parcelamento" && !clienteObjeto) {
       alert("Erro ao identificar o ID do cliente para gerar o parcelamento.");
       return;
     }
 
+    // Texto descritivo unificado com o nome de todos os produtos do carrinho
+    const stringProdutos = carrinho.map((c) => `${c.nome} (x${c.quantidade})`).join(", ");
+
     try {
-      // 1. Registra a Venda Geral
+      // 1. Registra a Venda Geral com a string de produtos combinados
       await api.post("/vendas", {
         cliente,
-        produto,
+        produto: stringProdutos,
         valorTotal: valorFinal,
         desconto: Number(desconto) || 0,
         valorPago: Number(valorPago) || 0,
@@ -82,23 +132,23 @@ function Vendas({ usuarioLogado }) {
         formaPagamento,
         status: valorRestante > 0 ? "Aguardando Pagamento" : "Orçamento",
         usuario: usuarioLogado?.nome || "Não identificado",
+        itens: carrinho, // Enviado caso sua API espere opcionalmente a tabela relacional
       });
 
-      // 2. Se for Parcelamento, registra automaticamente no financeiro do cliente
+      // 2. Se for Parcelamento, registra no fluxo financeiro do carnê do cliente
       if (formaPagamento === "Parcelamento") {
         await api.post("/parcelamentos", {
           cliente_id: clienteObjeto.id,
-          descricao: `Compra de ${produto}`,
+          descricao: `Compra de: ${stringProdutos}`,
           valor_total: valorFinal,
           entrada: Number(valorPago) || 0,
           quantidade_parcelas: Number(quantidadeParcelas) || 1,
         });
       }
 
-      // Limpa os campos do formulário
+      // Limpa os campos do formulário completo
       setCliente("");
-      setProduto("");
-      setValorTotal("");
+      setCarrinho([]);
       setDesconto("");
       setValorPago("");
       setFormaPagamento("PIX");
@@ -124,17 +174,11 @@ function Vendas({ usuarioLogado }) {
   }
 
   function enviarWhatsApp(venda) {
-    const clienteEncontrado = clientes.find(
-      (cliente) => cliente.nome === venda.cliente
-    );
-
-    const numero =
-      clienteEncontrado?.whatsapp || clienteEncontrado?.telefone || "";
-
+    const clienteEncontrado = clientes.find((c) => c.nome === venda.cliente);
+    const numero = clienteEncontrado?.whatsapp || clienteEncontrado?.telefone || "";
     const numeroLimpo = numero.replace(/\D/g, "");
 
     const message = `Olá ${venda.cliente}! Seu pedido na iLótica está pronto para retirada. Aguardamos sua visita!`;
-
     const url = numeroLimpo
       ? `https://wa.me/55${numeroLimpo}?text=${encodeURIComponent(message)}`
       : `https://wa.me/?text=${encodeURIComponent(message)}`;
@@ -144,18 +188,12 @@ function Vendas({ usuarioLogado }) {
 
   function corStatus(status) {
     switch (status) {
-      case "Orçamento":
-        return "#f59e0b";
-      case "Aguardando Pagamento":
-        return "#ef4444";
-      case "Em Produção":
-        return "#3b82f6";
-      case "Pronto para Retirada":
-        return "#10b981";
-      case "Entregue":
-        return "#64748b";
-      default:
-        return "#64748b";
+      case "Orçamento": return "#f59e0b";
+      case "Aguardando Pagamento": return "#ef4444";
+      case "Em Produção": return "#3b82f6";
+      case "Pronto para Retirada": return "#10b981";
+      case "Entregue": return "#64748b";
+      default: return "#64748b";
     }
   }
 
@@ -175,68 +213,48 @@ function Vendas({ usuarioLogado }) {
 
   const vendasFiltradas = vendas.filter((venda) => {
     const texto = busca.toLowerCase();
-
     const bateBusca =
       (venda.cliente || "").toLowerCase().includes(texto) ||
       (venda.produto || "").toLowerCase().includes(texto) ||
       (venda.formaPagamento || "").toLowerCase().includes(texto) ||
       (venda.usuario || "").toLowerCase().includes(texto);
 
-    const bateStatus =
-      filtroStatus === "Todos" || venda.status === filtroStatus;
-
+    const bateStatus = filtroStatus === "Todos" || venda.status === filtroStatus;
     const dataISO = dataVendaParaISO(venda.data);
-
     const bateDataInicio = !dataInicio || dataISO >= dataInicio;
     const bateDataFim = !dataFim || dataISO <= dataFim;
 
     return bateBusca && bateStatus && bateDataInicio && bateDataFim;
   });
 
-  const totalFiltrado = vendasFiltradas.reduce(
-    (total, venda) => total + Number(venda.valorTotal),
-    0
-  );
-
-  const emProducao = vendasFiltradas.filter(
-    (venda) => venda.status === "Em Produção"
-  ).length;
-
-  const prontos = vendasFiltradas.filter(
-    (venda) => venda.status === "Pronto para Retirada"
-  ).length;
-
-  const entregues = vendasFiltradas.filter(
-    (venda) => venda.status === "Entregue"
-  ).length;
+  const totalFiltrado = vendasFiltradas.reduce((total, v) => total + Number(v.valorTotal), 0);
+  const emProducao = vendasFiltradas.filter((v) => v.status === "Em Produção").length;
+  const prontos = vendasFiltradas.filter((v) => v.status === "Pronto para Retirada").length;
+  const entregues = vendasFiltradas.filter((v) => v.status === "Entregue").length;
 
   function gerarComprovante(venda) {
     const pdf = new jsPDF();
-
     pdf.addImage(logo, "PNG", 75, 8, 60, 28);
-
     pdf.setFontSize(16);
     pdf.text("COMPROVANTE DE VENDA", 105, 45, { align: "center" });
 
     pdf.setFontSize(11);
     pdf.text(`Data: ${venda.data}`, 20, 62);
     pdf.text(`Cliente: ${venda.cliente}`, 20, 74);
-    pdf.text(`Produto: ${venda.produto}`, 20, 86);
+    pdf.setFontSize(10);
+    pdf.text(`Produtos: ${venda.produto}`, 20, 86, { maxWidth: 170 });
 
-    pdf.line(20, 96, 190, 96);
+    pdf.line(20, 98, 190, 98);
 
-    pdf.text(`Valor final: R$ ${Number(venda.valorTotal).toFixed(2)}`, 20, 110);
-    pdf.text(`Desconto: R$ ${Number(venda.desconto || 0).toFixed(2)}`, 20, 122);
-    pdf.text(`Valor pago: R$ ${Number(venda.valorPago || 0).toFixed(2)}`, 20, 134);
-    pdf.text(
-      `Valor restante: R$ ${Number(venda.valorRestante || 0).toFixed(2)}`,
-      20,
-      146
-    );
+    pdf.setFontSize(11);
+    pdf.text(`Valor final: R$ ${Number(venda.valorTotal).toFixed(2)}`, 20, 112);
+    pdf.text(`Desconto: R$ ${Number(venda.desconto || 0).toFixed(2)}`, 20, 124);
+    pdf.text(`Valor pago: R$ ${Number(venda.valorPago || 0).toFixed(2)}`, 20, 136);
+    pdf.text(`Valor restante: R$ ${Number(venda.valorRestante || 0).toFixed(2)}`, 20, 148);
 
-    pdf.text(`Forma de pagamento: ${venda.formaPagamento}`, 20, 170);
-    pdf.text(`Status: ${venda.status}`, 20, 182);
-    pdf.text(`Vendedor: ${venda.usuario || "Não identificado"}`, 20, 194);
+    pdf.text(`Forma de pagamento: ${venda.formaPagamento}`, 20, 172);
+    pdf.text(`Status: ${venda.status}`, 20, 184);
+    pdf.text(`Vendedor: ${venda.usuario || "Não identificado"}`, 20, 196);
 
     pdf.save(`comprovante-${venda.cliente}.pdf`);
   }
@@ -247,33 +265,22 @@ function Vendas({ usuarioLogado }) {
       <p>Gestão comercial, filtros e acompanhamento dos pedidos da iLótica.</p>
 
       <div className="abas-internas">
-        <button
-          className={aba === "novo" ? "aba-ativa" : ""}
-          onClick={() => setAba("novo")}
-        >
+        <button className={aba === "novo" ? "aba-ativa" : ""} onClick={() => setAba("novo")}>
           Novo Pedido
         </button>
-
-        <button
-          className={aba === "filtros" ? "aba-ativa" : ""}
-          onClick={() => setAba("filtros")}
-        >
+        <button className={aba === "filtros" ? "aba-ativa" : ""} onClick={() => setAba("filtros")}>
           Filtros
         </button>
-
-        <button
-          className={aba === "pedidos" ? "aba-ativa" : ""}
-          onClick={() => setAba("pedidos")}
-        >
+        <button className={aba === "pedidos" ? "aba-ativa" : ""} onClick={() => setAba("pedidos")}>
           Pedidos
         </button>
       </div>
 
       {aba === "novo" && (
         <form className="form">
+          {/* Campo do Cliente */}
           <select value={cliente} onChange={(e) => setCliente(e.target.value)}>
             <option value="">Selecione o cliente</option>
-
             {clientes.map((item) => (
               <option key={item.id} value={item.nome}>
                 {item.nome}
@@ -281,28 +288,75 @@ function Vendas({ usuarioLogado }) {
             ))}
           </select>
 
-          <select
-            value={produto}
-            onChange={(e) => selecionarProduto(e.target.value)}
-          >
-            <option value="">Selecione o produto</option>
+          {/* 🆕 Container de Inclusão de Produtos no Carrinho */}
+          <div style={{ gridColumn: "span 2", display: "flex", gap: "10px", alignItems: "center" }}>
+            <select
+              style={{ flex: 2, marginBottom: 0 }}
+              value={produtoSelecionadoId}
+              onChange={(e) => setProdutoSelecionadoId(e.target.value)}
+            >
+              <option value="">Selecione um produto para adicionar...</option>
+              {produtos.map((item) => (
+                <option key={item.id} value={item.id} disabled={item.estoque <= 0}>
+                  {item.nome} | Valor: R$ {Number(item.precoVenda).toFixed(2)} (Estoque: {item.estoque})
+                </option>
+              ))}
+            </select>
 
-            {produtos.map((item) => (
-              <option
-                key={item.id}
-                value={item.nome}
-                disabled={item.estoque <= 0}
-              >
-                {item.nome} | Estoque: {item.estoque}
-              </option>
-            ))}
-          </select>
+            <input
+              style={{ flex: 0.5, marginBottom: 0, minWidth: "70px" }}
+              type="number"
+              min="1"
+              value={quantidadeItem}
+              onChange={(e) => setQuantidadeItem(Math.max(1, Number(e.target.value)))}
+              placeholder="Qtd"
+            />
 
+            <button
+              type="button"
+              style={{ flex: 0.8, whiteSpace: "nowrap", background: "#2563eb", color: "#fff", padding: "0 14px" }}
+              onClick={adicionarAoCarrinho}
+            >
+              ＋ Adicionar Item
+            </button>
+          </div>
+
+          {/* 🆕 Listagem Visual do Carrinho de Compras Intermediário */}
+          {carrinho.length > 0 && (
+            <div style={{ gridColumn: "span 2", background: "#f8fafc", border: "1px solid #e2e8f0", padding: "14px", borderRadius: "6px", margin: "5px 0 15px 0" }}>
+              <h4 style={{ margin: "0 0 10px 0", color: "#0f172a" }}>🛒 Produtos Adicionados</h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {carrinho.map((item, idx) => (
+                  <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", padding: "8px 12px", borderRadius: "4px", border: "1px solid #edf2f7" }}>
+                    <div>
+                      <span style={{ fontWeight: "500" }}>{item.nome}</span>
+                      <small style={{ color: "#64748b", marginLeft: "10px" }}>
+                        ({item.quantidade}x R$ {item.precoVenda.toFixed(2)})
+                      </small>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+                      <span style={{ fontWeight: "bold" }}>R$ {(item.precoVenda * item.quantidade).toFixed(2)}</span>
+                      <button
+                        type="button"
+                        style={{ padding: "4px 8px", background: "#ef4444", color: "#fff", fontSize: "12px", width: "auto" }}
+                        onClick={() => removerDoCarrinho(idx)}
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Campo de Valor Bruto Automático (Desabilitado pois vem da soma do carrinho) */}
           <input
-            type="number"
-            value={valorTotal}
-            onChange={(e) => setValorTotal(e.target.value)}
+            type="text"
+            value={carrinho.length > 0 ? `Valor Bruto Total: R$ ${valorTotalBruto.toFixed(2)}` : "Carrinho Vazio"}
+            disabled
             placeholder="Valor original"
+            style={{ fontWeight: "bold", background: "#f1f5f9" }}
           />
 
           <input
@@ -319,17 +373,13 @@ function Vendas({ usuarioLogado }) {
             placeholder="Valor pago (Entrada)"
           />
 
-          <select
-            value={formaPagamento}
-            onChange={(e) => setFormaPagamento(e.target.value)}
-          >
+          <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)}>
             <option value="PIX">PIX</option>
             <option value="Cartão">Cartão</option>
             <option value="Dinheiro">Dinheiro</option>
             <option value="Parcelamento">Parcelamento</option>
           </select>
 
-          {/* Campo dinâmico que aparece se a opção for Parcelamento */}
           {formaPagamento === "Parcelamento" && (
             <input
               type="number"
@@ -362,7 +412,6 @@ function Vendas({ usuarioLogado }) {
         <>
           <div className="painel-filtros">
             <h2>Filtros de Pedidos</h2>
-
             <div className="filtros-grid">
               <input
                 type="text"
@@ -371,31 +420,17 @@ function Vendas({ usuarioLogado }) {
                 onChange={(e) => setBusca(e.target.value)}
               />
 
-              <select
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
-              >
+              <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}>
                 <option value="Todos">Todos os status</option>
                 <option value="Orçamento">Orçamento</option>
-                <option value="Aguardando Pagamento">
-                  Aguardando Pagamento
-                </option>
+                <option value="Aguardando Pagamento">Aguardando Pagamento</option>
                 <option value="Em Produção">Em Produção</option>
                 <option value="Pronto para Retirada">Pronto para Retirada</option>
                 <option value="Entregue">Entregue</option>
               </select>
 
-              <input
-                type="date"
-                value={dataInicio}
-                onChange={(e) => setDataInicio(e.target.value)}
-              />
-
-              <input
-                type="date"
-                value={dataFim}
-                onChange={(e) => setDataFim(e.target.value)}
-              />
+              <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+              <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
 
               <button type="button" onClick={limparFiltros}>
                 Limpar Filtros
@@ -408,22 +443,18 @@ function Vendas({ usuarioLogado }) {
               <span>Total Filtrado</span>
               <strong>R$ {totalFiltrado.toFixed(2)}</strong>
             </div>
-
             <div className="card">
               <span>Pedidos Encontrados</span>
               <strong>{vendasFiltradas.length}</strong>
             </div>
-
             <div className="card">
               <span>Em Produção</span>
               <strong>{emProducao}</strong>
             </div>
-
             <div className="card">
               <span>Prontos</span>
               <strong>{prontos}</strong>
             </div>
-
             <div className="card">
               <span>Entregues</span>
               <strong>{entregues}</strong>
@@ -435,38 +466,26 @@ function Vendas({ usuarioLogado }) {
       {aba === "pedidos" && (
         <div className="lista">
           <h2>Pedidos</h2>
-
           {vendasFiltradas.length === 0 ? (
             <p>Nenhum pedido encontrado para os filtros selecionados.</p>
           ) : (
             vendasFiltradas.map((venda) => (
               <div className="item pedido-card" key={venda.id}>
                 <strong>{venda.cliente}</strong>
-                <span>Produto: {venda.produto}</span>
+                <span>Produtos: {venda.produto}</span>
                 <span>Valor final: R$ {Number(venda.valorTotal).toFixed(2)}</span>
                 <span>Desconto: R$ {Number(venda.desconto || 0).toFixed(2)}</span>
                 <span>Valor pago: R$ {Number(venda.valorPago || 0).toFixed(2)}</span>
-                <span>
-                  Restante: R$ {Number(venda.valorRestante || 0).toFixed(2)}
-                </span>
+                <span>Restante: R$ {Number(venda.valorRestante || 0).toFixed(2)}</span>
                 <span>Pagamento: {venda.formaPagamento}</span>
                 <span>Data: {venda.data}</span>
-
                 <span>Vendedor: {venda.usuario || "Não identificado"}</span>
 
-                <span
-                  style={{
-                    fontWeight: "bold",
-                    color: corStatus(venda.status),
-                  }}
-                >
+                <span style={{ fontWeight: "bold", color: corStatus(venda.status) }}>
                   Status: {venda.status}
                 </span>
 
-                <select
-                  value={venda.status}
-                  onChange={(e) => alterarStatus(venda.id, e.target.value)}
-                >
+                <select value={venda.status} onChange={(e) => alterarStatus(venda.id, e.target.value)}>
                   <option>Orçamento</option>
                   <option>Aguardando Pagamento</option>
                   <option>Em Produção</option>
@@ -479,11 +498,9 @@ function Vendas({ usuarioLogado }) {
                     Enviar WhatsApp
                   </button>
                 )}
-
                 <button type="button" onClick={() => gerarComprovante(venda)}>
                   Gerar Comprovante
                 </button>
-                
                 <button type="button" onClick={() => excluirVenda(venda.id)}>
                   Excluir
                 </button>
