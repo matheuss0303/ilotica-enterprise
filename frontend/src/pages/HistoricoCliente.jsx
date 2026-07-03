@@ -1,7 +1,44 @@
+import { useEffect, useState } from "react";
 import jsPDF from "jspdf";
 import logo from "../assets/logo-ilotica.png";
+import api from "../services/api";
 
 function HistoricoCliente({ historico, voltar }) {
+  const [parcelamentos, setParcelamentos] = useState([]);
+
+  useEffect(() => {
+    if (historico?.cliente?.id) {
+      buscarParcelamentos();
+    }
+  }, [historico]);
+
+  async function buscarParcelamentos() {
+    try {
+      const resposta = await api.get(
+        `/parcelamentos/${historico.cliente.id}`
+      );
+      setParcelamentos(resposta.data);
+    } catch (erro) {
+      console.error("Erro ao buscar parcelamentos:", erro);
+    }
+  }
+
+  async function pagarParcela(parcelamentoId) {
+    try {
+      // Envia a requisição de pagamento para o endpoint da API
+      await api.put(`/parcelamentos/${parcelamentoId}/pagar-parcela`, {
+        usuario: "Sistema" // Mude aqui para o nome do usuário logado se tiver essa informação
+      });
+
+      // Atualiza os dados na tela instantaneamente
+      buscarParcelamentos();
+      alert("Parcela recebida com sucesso!");
+    } catch (erro) {
+      console.error("Erro ao pagar parcela:", erro);
+      alert(erro.response?.data?.mensagem || "Erro ao receber parcela.");
+    }
+  }
+
   function criarTabelaPDF(pdf, titulo, x, y, exame, tipo) {
     pdf.setLineWidth(0.3);
     pdf.rect(x, y, 180, 36);
@@ -92,9 +129,9 @@ function HistoricoCliente({ historico, voltar }) {
       <p>CPF: {historico.cliente.cpf || "Não informado"}</p>
       <p>Total gasto: R$ {Number(historico.totalGasto).toFixed(2)}</p>
 
+      {/* SEÇÃO DE COMPRAS */}
       <div className="lista">
         <h2>Compras</h2>
-
         {historico.vendas.length === 0 ? (
           <p>Nenhuma compra registrada.</p>
         ) : (
@@ -110,9 +147,9 @@ function HistoricoCliente({ historico, voltar }) {
         )}
       </div>
 
+      {/* SEÇÃO DE EXAMES / O.S. */}
       <div className="lista">
         <h2>Receitas / O.S.</h2>
-
         {historico.exames.length === 0 ? (
           <p>Nenhuma receita cadastrada.</p>
         ) : (
@@ -158,6 +195,65 @@ function HistoricoCliente({ historico, voltar }) {
 
               <button type="button" onClick={() => gerarPDF(exame)}>
                 Gerar PDF / O.S.
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* SEÇÃO DO FINANCEIRO / PARCELAMENTOS */}
+      <div className="lista">
+        <h2>Financeiro / Parcelamentos</h2>
+        {parcelamentos.length === 0 ? (
+          <p>Este cliente não possui parcelamentos</p>
+        ) : (
+          parcelamentos.map((item) => (
+            <div className="item" key={item.id}>
+              <strong>{item.descricao}</strong>
+
+              <span>
+                Valor total: R$ {Number(item.valor_total).toFixed(2)}
+              </span>
+
+              <span>
+                Entrada: R$ {Number(item.entrada).toFixed(2)}
+              </span>
+
+              <span>
+                Restante: R$ {Number(item.valor_restante).toFixed(2)}
+              </span>
+
+              <span>
+                Parcelas: {item.quantidade_parcelas}
+              </span>
+
+              <span>
+                Valor da parcela: R$ {Number(item.valor_parcela).toFixed(2)}
+              </span>
+
+              <span>
+                Pagas: {item.parcelas_pagas}
+              </span>
+
+              <span>
+                Status: {item.status}
+              </span>
+
+              <button 
+                type="button" 
+                onClick={() => pagarParcela(item.id)}
+                disabled={item.status === "Quitado"}
+                style={{
+                  backgroundColor: item.status === "Quitado" ? "#ccc" : "#28a745",
+                  color: "#fff",
+                  border: "none",
+                  padding: "6px 12px",
+                  borderRadius: "4px",
+                  marginTop: "8px",
+                  cursor: item.status === "Quitado" ? "not-allowed" : "pointer"
+                }}
+              >
+                {item.status === "Quitado" ? "Totalmente Pago" : "Receber parcela"}
               </button>
             </div>
           ))

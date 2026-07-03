@@ -176,6 +176,34 @@ async function conectarBanco() {
       observacoes TEXT,
       status TEXT DEFAULT 'Agendado'
     );
+
+    CREATE TABLE IF NOT EXISTS parcelamentos (
+    id SERIAL PRIMARY KEY,
+    cliente_id INTEGER NOT NULL,
+    descricao TEXT,
+    valor_total NUMERIC(10,2) NOT NULL,
+    entrada NUMERIC(10,2) DEFAULT 0,
+    valor_restante NUMERIC(10,2) NOT NULL,
+    quantidade_parcelas INTEGER NOT NULL,
+    parcelas_pagas INTEGER DEFAULT 0,
+    valor_parcela NUMERIC(10,2) NOT NULL,
+    status VARCHAR(30) DEFAULT 'Aberto',
+    data DATE DEFAULT CURRENT_DATE
+);
+    
+    CREATE TABLE IF NOT EXISTS parcelas (
+    id SERIAL PRIMARY KEY,
+    parcelamento_id INTEGER,
+    numero INTEGER,
+    valor NUMERIC(10,2),
+    vencimento DATE,
+    data_pagamento DATE,
+    forma_pagamento TEXT,
+    status VARCHAR(20) DEFAULT 'Aberta'
+
+);
+
+
   `);
 
   const lojaPadrao = await db.get("SELECT * FROM loja WHERE id = ?", [1]);
