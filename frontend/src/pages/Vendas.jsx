@@ -15,6 +15,7 @@ function Vendas({ usuarioLogado }) {
   const [desconto, setDesconto] = useState("");
   const [valorPago, setValorPago] = useState("");
   const [formaPagamento, setFormaPagamento] = useState("PIX");
+  const [quantidadeParcelas, setQuantidadeParcelas] = useState("1"); // Novo estado
 
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("Todos");
@@ -61,26 +62,55 @@ function Vendas({ usuarioLogado }) {
       return;
     }
 
-    await api.post("/vendas", {
-      cliente,
-      produto,
-      valorTotal: valorFinal,
-      desconto: Number(desconto) || 0,
-      valorPago: Number(valorPago) || 0,
-      valorRestante,
-      formaPagamento,
-      status: valorRestante > 0 ? "Aguardando Pagamento" : "Orçamento",
-      usuario: usuarioLogado?.nome || "Não identificado",
-    });
+    // Encontra o objeto do cliente selecionado para pegar o ID dele
+    const clienteObjeto = clientes.find((c) => c.nome === cliente);
 
-    setCliente("");
-    setProduto("");
-    setValorTotal("");
-    setDesconto("");
-    setValorPago("");
+    if (formaPagamento === "Parcelamento" && !clienteObjeto) {
+      alert("Erro ao identificar o ID do cliente para gerar o parcelamento.");
+      return;
+    }
 
-    await carregarDados();
-    setAba("pedidos");
+    try {
+      // 1. Registra a Venda Geral
+      await api.post("/vendas", {
+        cliente,
+        produto,
+        valorTotal: valorFinal,
+        desconto: Number(desconto) || 0,
+        valorPago: Number(valorPago) || 0,
+        valorRestante,
+        formaPagamento,
+        status: valorRestante > 0 ? "Aguardando Pagamento" : "Orçamento",
+        usuario: usuarioLogado?.nome || "Não identificado",
+      });
+
+      // 2. Se for Parcelamento, registra automaticamente no financeiro do cliente
+      if (formaPagamento === "Parcelamento") {
+        await api.post("/parcelamentos", {
+          cliente_id: clienteObjeto.id,
+          descricao: `Compra de ${produto}`,
+          valor_total: valorFinal,
+          entrada: Number(valorPago) || 0,
+          quantidade_parcelas: Number(quantidadeParcelas) || 1,
+        });
+      }
+
+      // Limpa os campos do formulário
+      setCliente("");
+      setProduto("");
+      setValorTotal("");
+      setDesconto("");
+      setValorPago("");
+      setFormaPagamento("PIX");
+      setQuantidadeParcelas("1");
+
+      alert("Pedido e fluxo financeiro criados com sucesso!");
+      await carregarDados();
+      setAba("pedidos");
+    } catch (erro) {
+      console.error("Erro ao registrar venda/parcelamento:", erro);
+      alert("Ocorreu um erro ao processar a venda.");
+    }
   }
 
   async function alterarStatus(id, status) {
@@ -103,11 +133,11 @@ function Vendas({ usuarioLogado }) {
 
     const numeroLimpo = numero.replace(/\D/g, "");
 
-    const mensagem = `Olá ${venda.cliente}! Seu pedido na iLótica está pronto para retirada. Aguardamos sua visita!`;
+    const message = `Olá ${venda.cliente}! Seu pedido na iLótica está pronto para retirada. Aguardamos sua visita!`;
 
     const url = numeroLimpo
-      ? `https://wa.me/55${numeroLimpo}?text=${encodeURIComponent(mensagem)}`
-      : `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
+      ? `https://wa.me/55${numeroLimpo}?text=${encodeURIComponent(message)}`
+      : `https://wa.me/?text=${encodeURIComponent(message)}`;
 
     window.open(url, "_blank");
   }
@@ -181,37 +211,35 @@ function Vendas({ usuarioLogado }) {
   ).length;
 
   function gerarComprovante(venda) {
-  const pdf = new jsPDF();
+    const pdf = new jsPDF();
 
-  pdf.addImage(logo, "PNG", 75, 8, 60, 28);
+    pdf.addImage(logo, "PNG", 75, 8, 60, 28);
 
-  pdf.setFontSize(16);
-  pdf.text("COMPROVANTE DE VENDA", 105, 45, { align: "center" });
+    pdf.setFontSize(16);
+    pdf.text("COMPROVANTE DE VENDA", 105, 45, { align: "center" });
 
-  pdf.setFontSize(11);
-  pdf.text(`Data: ${venda.data}`, 20, 62);
-  pdf.text(`Cliente: ${venda.cliente}`, 20, 74);
-  pdf.text(`Produto: ${venda.produto}`, 20, 86);
+    pdf.setFontSize(11);
+    pdf.text(`Data: ${venda.data}`, 20, 62);
+    pdf.text(`Cliente: ${venda.cliente}`, 20, 74);
+    pdf.text(`Produto: ${venda.produto}`, 20, 86);
 
-  pdf.line(20, 96, 190, 96);
+    pdf.line(20, 96, 190, 96);
 
-  pdf.text(`Valor final: R$ ${Number(venda.valorTotal).toFixed(2)}`, 20, 110);
-  pdf.text(`Desconto: R$ ${Number(venda.desconto || 0).toFixed(2)}`, 20, 122);
-  pdf.text(`Valor pago: R$ ${Number(venda.valorPago || 0).toFixed(2)}`, 20, 134);
-  pdf.text(
-    `Valor restante: R$ ${Number(venda.valorRestante || 0).toFixed(2)}`,
-    20,
-    146
-  );
+    pdf.text(`Valor final: R$ ${Number(venda.valorTotal).toFixed(2)}`, 20, 110);
+    pdf.text(`Desconto: R$ ${Number(venda.desconto || 0).toFixed(2)}`, 20, 122);
+    pdf.text(`Valor pago: R$ ${Number(venda.valorPago || 0).toFixed(2)}`, 20, 134);
+    pdf.text(
+      `Valor restante: R$ ${Number(venda.valorRestante || 0).toFixed(2)}`,
+      20,
+      146
+    );
 
-  pdf.text(`Forma de pagamento: ${venda.formaPagamento}`, 20, 170);
-  pdf.text(`Status: ${venda.status}`, 20, 182);
-  pdf.text(`Vendedor: ${venda.usuario || "Não identificado"}`, 20, 194);
+    pdf.text(`Forma de pagamento: ${venda.formaPagamento}`, 20, 170);
+    pdf.text(`Status: ${venda.status}`, 20, 182);
+    pdf.text(`Vendedor: ${venda.usuario || "Não identificado"}`, 20, 194);
 
-  pdf.save(`comprovante-${venda.cliente}.pdf`);
-}
-
-  
+    pdf.save(`comprovante-${venda.cliente}.pdf`);
+  }
 
   return (
     <section className="page">
@@ -288,7 +316,7 @@ function Vendas({ usuarioLogado }) {
             type="number"
             value={valorPago}
             onChange={(e) => setValorPago(e.target.value)}
-            placeholder="Valor pago"
+            placeholder="Valor pago (Entrada)"
           />
 
           <select
@@ -298,11 +326,29 @@ function Vendas({ usuarioLogado }) {
             <option value="PIX">PIX</option>
             <option value="Cartão">Cartão</option>
             <option value="Dinheiro">Dinheiro</option>
+            <option value="Parcelamento">Parcelamento</option>
           </select>
+
+          {/* Campo dinâmico que aparece se a opção for Parcelamento */}
+          {formaPagamento === "Parcelamento" && (
+            <input
+              type="number"
+              min="1"
+              value={quantidadeParcelas}
+              onChange={(e) => setQuantidadeParcelas(e.target.value)}
+              placeholder="Quantidade de Parcelas"
+              required
+            />
+          )}
 
           <div className="resumo-venda">
             <span>Valor final: R$ {valorFinal.toFixed(2)}</span>
             <span>Valor pago: R$ {Number(valorPago || 0).toFixed(2)}</span>
+            {formaPagamento === "Parcelamento" && (
+              <span>
+                Valor por parcela: R$ {(valorRestante / (Number(quantidadeParcelas) || 1)).toFixed(2)}
+              </span>
+            )}
             <strong>Restante: R$ {valorRestante.toFixed(2)}</strong>
           </div>
 
