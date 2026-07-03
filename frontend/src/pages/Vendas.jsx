@@ -11,15 +11,15 @@ function Vendas({ usuarioLogado }) {
 
   // Estados do Pedido Geral
   const [cliente, setCliente] = useState("");
-  const [carrinho, setCarrinho] = useState([]); // 🆕 Lista de produtos adicionados
+  const [carrinho, setCarrinho] = useState([]);
   const [desconto, setDesconto] = useState("");
   const [valorPago, setValorPago] = useState("");
   const [formaPagamento, setFormaPagamento] = useState("PIX");
   const [quantidadeParcelas, setQuantidadeParcelas] = useState("1");
 
   // Estados auxiliares para a seleção de itens individuais antes de ir ao carrinho
-  const [produtoSelecionadoId, setProdutoSelecionadoId] = useState(""); // 🆕
-  const [quantidadeItem, setQuantidadeItem] = useState(1); // 🆕
+  const [produtoSelecionadoId, setProdutoSelecionadoId] = useState("");
+  const [quantidadeItem, setQuantidadeItem] = useState(1);
 
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("Todos");
@@ -44,7 +44,6 @@ function Vendas({ usuarioLogado }) {
     }
   }
 
-  // 🆕 Adiciona o produto selecionado à lista temporária do carrinho
   function adicionarAoCarrinho() {
     if (!produtoSelecionadoId) {
       alert("Selecione um produto antes de adicionar.");
@@ -59,7 +58,6 @@ function Vendas({ usuarioLogado }) {
       return;
     }
 
-    // Se o produto já existir no carrinho, apenas soma a quantidade
     const itemExistenteIndex = carrinho.findIndex((c) => String(c.id) === String(itemEncontrado.id));
     if (itemExistenteIndex > -1) {
       const novoCarrinho = [...carrinho];
@@ -82,17 +80,14 @@ function Vendas({ usuarioLogado }) {
       ]);
     }
 
-    // Reseta seletores de item individual
     setProdutoSelecionadoId("");
     setQuantidadeItem(1);
   }
 
-  // 🆕 Remove um item do carrinho
   function removerDoCarrinho(indexItem) {
     setCarrinho(carrinho.filter((_, index) => index !== indexItem));
   }
 
-  // 🆕 Calcula o valor bruto somando os itens do carrinho
   const valorTotalBruto = carrinho.reduce(
     (total, item) => total + item.precoVenda * item.quantidade,
     0
@@ -117,11 +112,13 @@ function Vendas({ usuarioLogado }) {
       return;
     }
 
-    // Texto descritivo unificado com o nome de todos os produtos do carrinho
     const stringProdutos = carrinho.map((c) => `${c.nome} (x${c.quantidade})`).join(", ");
 
+    // 🆕 Geração automática da data formatada
+    const hoje = new Date();
+    const dataFormatada = `${String(hoje.getDate()).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`;
+
     try {
-      // 1. Registra a Venda Geral com a string de produtos combinados
       await api.post("/vendas", {
         cliente,
         produto: stringProdutos,
@@ -132,10 +129,10 @@ function Vendas({ usuarioLogado }) {
         formaPagamento,
         status: valorRestante > 0 ? "Aguardando Pagamento" : "Orçamento",
         usuario: usuarioLogado?.nome || "Não identificado",
-        itens: carrinho, // Enviado caso sua API espere opcionalmente a tabela relacional
+        data: dataFormatada, // 🆕 Campo de data adicionado para evitar bloqueio do backend
+        itens: carrinho, 
       });
 
-      // 2. Se for Parcelamento, registra no fluxo financeiro do carnê do cliente
       if (formaPagamento === "Parcelamento") {
         await api.post("/parcelamentos", {
           cliente_id: clienteObjeto.id,
@@ -146,7 +143,6 @@ function Vendas({ usuarioLogado }) {
         });
       }
 
-      // Limpa os campos do formulário completo
       setCliente("");
       setCarrinho([]);
       setDesconto("");
@@ -158,8 +154,9 @@ function Vendas({ usuarioLogado }) {
       await carregarDados();
       setAba("pedidos");
     } catch (erro) {
-      console.error("Erro ao registrar venda/parcelamento:", erro);
-      alert("Ocorreu um erro ao processar a venda.");
+      // 🆕 Melhoria no Log de Erro para descobrirmos o que o backend recusou
+      console.error("Erro detalhado retornado pelo backend:", erro.response?.data || erro);
+      alert("Ocorreu um erro ao processar a venda. Pressione F12 e olhe a aba Console para ver o motivo.");
     }
   }
 
@@ -278,7 +275,6 @@ function Vendas({ usuarioLogado }) {
 
       {aba === "novo" && (
         <form className="form">
-          {/* Campo do Cliente */}
           <select value={cliente} onChange={(e) => setCliente(e.target.value)}>
             <option value="">Selecione o cliente</option>
             {clientes.map((item) => (
@@ -288,7 +284,6 @@ function Vendas({ usuarioLogado }) {
             ))}
           </select>
 
-          {/* 🆕 Container de Inclusão de Produtos no Carrinho */}
           <div style={{ gridColumn: "span 2", display: "flex", gap: "10px", alignItems: "center" }}>
             <select
               style={{ flex: 2, marginBottom: 0 }}
@@ -321,7 +316,6 @@ function Vendas({ usuarioLogado }) {
             </button>
           </div>
 
-          {/* 🆕 Listagem Visual do Carrinho de Compras Intermediário */}
           {carrinho.length > 0 && (
             <div style={{ gridColumn: "span 2", background: "#f8fafc", border: "1px solid #e2e8f0", padding: "14px", borderRadius: "6px", margin: "5px 0 15px 0" }}>
               <h4 style={{ margin: "0 0 10px 0", color: "#0f172a" }}>🛒 Produtos Adicionados</h4>
@@ -350,7 +344,6 @@ function Vendas({ usuarioLogado }) {
             </div>
           )}
 
-          {/* Campo de Valor Bruto Automático (Desabilitado pois vem da soma do carrinho) */}
           <input
             type="text"
             value={carrinho.length > 0 ? `Valor Bruto Total: R$ ${valorTotalBruto.toFixed(2)}` : "Carrinho Vazio"}
