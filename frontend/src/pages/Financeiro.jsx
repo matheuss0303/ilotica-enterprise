@@ -6,6 +6,12 @@ import logo from "../assets/logo-ilotica.png";
 function Financeiro() {
   const [aba, setAba] = useState("resumo");
   const [vendas, setVendas] = useState([]);
+  
+  // 🆕 Estados adicionados para controle de Devedores e Parcelas
+  const [devedores, setDevedores] = useState([]);
+  const [parcelasDetalhes, setParcelasDetalhes] = useState([]);
+  const [parcelamentoSelecionado, setParcelamentoSelecionado] = useState(null);
+  const [modalAberto, setModalAberto] = useState(false);
 
   const [mesSelecionado, setMesSelecionado] = useState("");
   const [dataInicio, setDataInicio] = useState("");
@@ -13,20 +19,71 @@ function Financeiro() {
 
   useEffect(() => {
     buscarVendas();
+    buscarDevedores(); // 🆕 Carrega a lista de devedores ao iniciar
   }, []);
 
   async function buscarVendas() {
-    const resposta = await api.get("/vendas");
-    setVendas(resposta.data);
+    try {
+      const resposta = await api.get("/vendas");
+      setVendas(resposta.data);
+    } catch (erro) {
+      console.error("Erro ao buscar vendas:", erro);
+    }
+  }
+
+  // 🆕 Função para carregar os parcelamentos em aberto
+  async function buscarDevedores() {
+    try {
+      const resposta = await api.get("/financeiro/devedores");
+      setDevedores(resposta.data);
+    } catch (erro) {
+      console.error("Erro ao buscar devedores:", erro);
+    }
+  }
+
+  // 🆕 Função para abrir o histórico de parcelas de um devedor específico
+  async function abrirDetalhesParcelas(parcelamento) {
+    try {
+      const resposta = await api.get(`/parcelamentos/detalhes/${parcelamento.id}`);
+      setParcelasDetalhes(resposta.data);
+      setParcelamentoSelecionado(parcelamento);
+      setModalAberto(true);
+    } catch (erro) {
+      console.error("Erro ao buscar detalhes das parcelas:", erro);
+    }
+  }
+
+  // 🆕 Função para dar baixa e pagar a próxima parcela ativa
+  async function confirmarPagamentoParcela() {
+    if (!parcelamentoSelecionado) return;
+
+    try {
+      const resposta = await api.put(`/parcelamentos/${parcelamentoSelecionado.id}/pagar-parcela`, {
+        usuario: "Financeiro"
+      });
+
+      alert(resposta.data.mensagem);
+
+      // Atualiza os dados locais na tela
+      buscarDevedores();
+      
+      // Se ainda estiver no modal, atualiza as parcelas internas ou fecha se o plano foi quitado
+      if (resposta.data.dados.status === "Quitado") {
+        setModalAberto(false);
+      } else {
+        // Recarrega as parcelas atualizadas no modal
+        const atualizadas = await api.get(`/parcelamentos/detalhes/${parcelamentoSelecionado.id}`);
+        setParcelasDetalhes(atualizadas.data);
+      }
+    } catch (erro) {
+      alert(erro.response?.data?.mensagem || "Erro ao processar o pagamento.");
+    }
   }
 
   function dataBRParaISO(dataBR) {
     if (!dataBR) return "";
-
     const partes = dataBR.split("/");
-
     if (partes.length !== 3) return "";
-
     return `${partes[2]}-${partes[1]}-${partes[0]}`;
   }
 
@@ -38,7 +95,6 @@ function Financeiro() {
 
   const vendasFiltradasRelatorio = vendas.filter((venda) => {
     const dataISO = dataBRParaISO(venda.data);
-
     if (!dataISO) return false;
 
     if (mesSelecionado) {
@@ -99,7 +155,6 @@ function Financeiro() {
     const pdf = new jsPDF();
 
     pdf.addImage(logo, "PNG", 75, 8, 60, 28);
-
     pdf.setFontSize(14);
     pdf.text("RELATÓRIO FINANCEIRO", 105, 45, { align: "center" });
 
@@ -143,7 +198,6 @@ function Financeiro() {
       }
 
       pdf.setFontSize(9);
-
       pdf.text(
         `Cliente: ${venda.cliente} | Produto: ${venda.produto}`,
         15,
@@ -192,6 +246,14 @@ function Financeiro() {
           Pagamentos
         </button>
 
+        {/* 🆕 NOVA ABA: Contas a Receber (Inadimplentes e Parcelas) */}
+        <button
+          className={aba === "devedores" ? "aba-ativa" : ""}
+          onClick={() => setAba("devedores")}
+        >
+          Contas a Receber
+        </button>
+
         <button
           className={aba === "relatorio" ? "aba-ativa" : ""}
           onClick={() => setAba("relatorio")}
@@ -236,6 +298,43 @@ function Financeiro() {
             <strong>R$ {dinheiro.toFixed(2)}</strong>
           </div>
         </section>
+      )}
+
+      {/* 🆕 RENDERIZAÇÃO DA ABA: Contas a Receber */}
+      {aba === "devedores" && (
+        <div className="lista">
+          <h2>Contas com Parcelas em Aberto 🔴</h2>
+          
+          {devedores.length === 0 ? (
+            <p>Nenhum cliente inadimplente ou com parcelamento em aberto.</p>
+          ) : (
+            devedores.map((p) => (
+              <div className="item" key={p.id} style={{ borderLeft: "5px solid #ef4444" }}>
+                <strong>{p.cliente_nome}</strong>
+                <span>📞 Contato: {p.cliente_telefone || "Não cadastrado"}</span>
+                <span>📝 Descrição: {p.descricao || "Venda via Carnê / Parcelamento"}</span>
+                
+                <div style={{ margin: "8px 0", fontSize: "14px" }}>
+                  <span>Valor do Plano: <strong>R$ {Number(p.valor_total).toFixed(2)}</strong></span> |{" "}
+                  <span>Restante: <strong style={{ color: "#ef4444" }}>R$ {Number(p.valor_restante).toFixed(2)}</strong></span>
+                </div>
+
+                <div style={{ fontSize: "13px", color: "#64748b" }}>
+                  <span>Parcelas Pagas: {p.parcelas_pagas} de {p.quantidade_parcelas}</span> |{" "}
+                  <span>Valor da Parcela: R$ {Number(p.valor_parcela).toFixed(2)}</span>
+                </div>
+
+                <button 
+                  type="button" 
+                  style={{ marginTop: "12px", background: "#0f172a", color: "#fff" }}
+                  onClick={() => abrirDetalhesParcelas(p)}
+                >
+                  Ver Parcelas e Dar Baixa
+                </button>
+              </div>
+            ))
+          )}
+        </div>
       )}
 
       {aba === "relatorio" && (
@@ -333,6 +432,71 @@ function Financeiro() {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {/* 🆕 MODAL DE DETALHES DAS PARCELAS */}
+      {modalAberto && parcelamentoSelecionado && (
+        <div className="modal-overlay" style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 9999
+        }}>
+          <div className="modal-content" style={{
+            background: "#fff", padding: "24px", borderRadius: "8px", width: "90%", maxWidth: "550px", maxHeight: "85vh", overflowY: "auto"
+          }}>
+            <h3>Histórico de Parcelas</h3>
+            <p>Cliente: <strong>{parcelamentoSelecionado.cliente_nome}</strong></p>
+            <p style={{ fontSize: "14px", margin: "-8px 0 16px 0", color: "#64748b" }}>
+              Restante: R$ {Number(parcelamentoSelecionado.valor_restante).toFixed(2)}
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
+              {parcelasDetalhes.map((parc) => (
+                <div key={parc.id} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "10px", borderRadius: "6px", background: parc.status === "Pago" ? "#f0fdf4" : "#fef2f2",
+                  border: parc.status === "Pago" ? "1px solid #bbf7d0" : "1px solid #fecaca"
+                }}>
+                  <div>
+                    <span style={{ fontWeight: "bold" }}>Parcela {parc.numero}</span>
+                    <div style={{ fontSize: "12px", color: "#64748b" }}>
+                      Vencimento: {parc.vencimento.split("-").reverse().join("/")}
+                      {parc.data_pagamento && ` | Pago em: ${parc.data_pagamento.split("-").reverse().join("/")}`}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <span style={{ fontWeight: "600" }}>R$ {Number(parc.valor).toFixed(2)}</span>
+                    <span style={{
+                      fontSize: "11px", fontWeight: "700", padding: "2px 6px", borderRadius: "4px",
+                      background: parc.status === "Pago" ? "#22c55e" : "#ef4444", color: "#fff"
+                    }}>
+                      {parc.status.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", justifyContent: "end" }}>
+              <button 
+                type="button" 
+                style={{ background: "#94a3b8", color: "#fff" }} 
+                onClick={() => setModalAberto(false)}
+              >
+                Fechar
+              </button>
+              
+              {parcelamentoSelecionado.valor_restante > 0 && (
+                <button 
+                  type="button" 
+                  style={{ background: "#22c55e", color: "#fff" }}
+                  onClick={confirmarPagamentoParcela}
+                >
+                  Dar Baixa na Próxima Parcela
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </section>

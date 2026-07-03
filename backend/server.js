@@ -209,6 +209,36 @@ async function iniciarServidor() {
     }
   });
 
+  // 🆕 ROTA ADICIONADA: Busca todos os parcelamentos em aberto com os dados vinculados do cliente (Para o Financeiro)
+  app.get("/financeiro/devedores", async (req, res) => {
+    try {
+      const devedores = await db.all(
+        `SELECT p.*, c.nome AS cliente_nome, c.telefone AS cliente_telefone 
+         FROM parcelamentos p
+         JOIN clientes c ON p.cliente_id = c.id
+         WHERE p.status = 'Aberto'
+         ORDER BY p.id DESC`
+      );
+      res.json(devedores);
+    } catch (erro) {
+      console.error(erro);
+      res.status(500).json({ mensagem: "Erro ao buscar a lista de devedores." });
+    }
+  });
+
+  // 🆕 ROTA ADICIONADA: Conta a quantidade única de clientes com parcelamentos em aberto (Para o Dashboard)
+  app.get("/dashboard/devedores-contador", async (req, res) => {
+    try {
+      const resultado = await db.get(
+        `SELECT COUNT(DISTINCT cliente_id) AS total FROM parcelamentos WHERE status = 'Aberto'`
+      );
+      res.json({ total: resultado ? resultado.total : 0 });
+    } catch (erro) {
+      console.error(erro);
+      res.status(500).json({ mensagem: "Erro ao contar devedores do dashboard." });
+    }
+  });
+
   // 🔄 ROTA ATUALIZADA: Cria o parcelamento mestre e gera as parcelas individuais no banco
   app.post("/parcelamentos", async (req, res) => {
     try {
@@ -802,7 +832,7 @@ async function iniciarServidor() {
     const { status } = req.body;
 
     await db.run("UPDATE agenda SET status = ? WHERE id = ?", [status, id]);
-    res.json({ mensagem: "Status do agendamento atualizado." });
+    res.json({ mensagem: "Status do agendamento updated." });
   });
 
   app.delete("/agenda/:id", async (req, res) => {

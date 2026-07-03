@@ -18,6 +18,7 @@ function Dashboard({ usuarioLogado }) {
   const [produtos, setProdutos] = useState([]);
   const [vendas, setVendas] = useState([]);
   const [exames, setExames] = useState([]);
+  const [totalDevedores, setTotalDevedores] = useState(0); // 🆕 Estado para armazenar o contador de devedores
   const podeVerFinanceiro = usuarioLogado?.tipo === "admin";
 
   useEffect(() => {
@@ -25,15 +26,23 @@ function Dashboard({ usuarioLogado }) {
   }, []);
 
   async function carregarDados() {
-    const clientesResposta = await api.get("/clientes");
-    const produtosResposta = await api.get("/produtos");
-    const vendasResposta = await api.get("/vendas");
-    const examesResposta = await api.get("/exames");
+    try {
+      const clientesResposta = await api.get("/clientes");
+      const produtosResposta = await api.get("/produtos");
+      const vendasResposta = await api.get("/vendas");
+      const examesResposta = await api.get("/exames");
+      
+      // 🆕 Busca a contagem de clientes com parcelas em aberto
+      const devedoresResposta = await api.get("/dashboard/devedores-contador");
 
-    setClientes(clientesResposta.data);
-    setProdutos(produtosResposta.data);
-    setVendas(vendasResposta.data);
-    setExames(examesResposta.data);
+      setClientes(clientesResposta.data);
+      setProdutos(produtosResposta.data);
+      setVendas(vendasResposta.data);
+      setExames(examesResposta.data);
+      setTotalDevedores(devedoresResposta.data.total);
+    } catch (erro) {
+      console.error("Erro ao carregar os dados do dashboard:", erro);
+    }
   }
 
   function enviarAniversarioWhatsApp(cliente) {
@@ -79,7 +88,7 @@ function Dashboard({ usuarioLogado }) {
   ).length;
 
   const osProducao = exames.filter(
-    (exame) => exame.status_os === "Em Produção"
+    (exame) => examen.status_os === "Em Produção"
   ).length;
 
   const osProntas = exames.filter(
@@ -167,9 +176,14 @@ function Dashboard({ usuarioLogado }) {
                 <span>Faturamento Hoje</span>
                 <strong>R$ {faturamentoHoje.toFixed(2)}</strong>
               </div>
+
+              {/* 🆕 NOVO CARD: Clientes com Parcelas em Aberto */}
+              <div className="card">
+                <span>🔴 Clientes Inadimplentes</span>
+                <strong>{totalDevedores}</strong>
+              </div>
             </>
           )}
-          
 
           <div className="card">
             <span>Clientes</span>
