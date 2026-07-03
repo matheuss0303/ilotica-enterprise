@@ -88,7 +88,7 @@ function Dashboard({ usuarioLogado }) {
   ).length;
 
   const osProducao = exames.filter(
-    (exame) => examen.status_os === "Em Produção"
+    (exame) => exame.status_os === "Em Produção"
   ).length;
 
   const osProntas = exames.filter(
