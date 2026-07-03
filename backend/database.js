@@ -22,6 +22,16 @@ function ajustarLinha(row) {
     valorRestante: row.valorrestante ?? row.valorRestante,
 
     criadoPor: row.criadopor ?? row.criadoPor,
+
+    // 🆕 Ajustes para as tabelas de parcelamento mapearem perfeitamente no Frontend:
+    cliente_id: row.cliente_id ?? row.cliente_id,
+    valor_total: row.valor_total ?? row.valor_total,
+    valor_restante: row.valor_restante ?? row.valor_restante,
+    quantidade_parcelas: row.quantidade_parcelas ?? row.quantidade_parcelas,
+    parcelas_pagas: row.parcelas_pagas ?? row.parcelas_pagas,
+    valor_parcela: row.valor_parcela ?? row.valor_parcela,
+    data_pagamento: row.data_pagamento ?? row.data_pagamento,
+    forma_pagamento: row.forma_pagamento ?? row.forma_pagamento,
   };
 }
 
@@ -178,32 +188,29 @@ async function conectarBanco() {
     );
 
     CREATE TABLE IF NOT EXISTS parcelamentos (
-    id SERIAL PRIMARY KEY,
-    cliente_id INTEGER NOT NULL,
-    descricao TEXT,
-    valor_total NUMERIC(10,2) NOT NULL,
-    entrada NUMERIC(10,2) DEFAULT 0,
-    valor_restante NUMERIC(10,2) NOT NULL,
-    quantidade_parcelas INTEGER NOT NULL,
-    parcelas_pagas INTEGER DEFAULT 0,
-    valor_parcela NUMERIC(10,2) NOT NULL,
-    status VARCHAR(30) DEFAULT 'Aberto',
-    data DATE DEFAULT CURRENT_DATE
-);
-    
+      id SERIAL PRIMARY KEY,
+      cliente_id INTEGER NOT NULL,
+      descricao TEXT,
+      valor_total NUMERIC(10,2) NOT NULL,
+      entrada NUMERIC(10,2) DEFAULT 0,
+      valor_restante NUMERIC(10,2) NOT NULL,
+      quantidade_parcelas INTEGER NOT NULL,
+      parcelas_pagas INTEGER DEFAULT 0,
+      valor_parcela NUMERIC(10,2) NOT NULL,
+      status VARCHAR(30) DEFAULT 'Aberto',
+      data DATE DEFAULT CURRENT_DATE
+    );
+        
     CREATE TABLE IF NOT EXISTS parcelas (
-    id SERIAL PRIMARY KEY,
-    parcelamento_id INTEGER,
-    numero INTEGER,
-    valor NUMERIC(10,2),
-    vencimento DATE,
-    data_pagamento DATE,
-    forma_pagamento TEXT,
-    status VARCHAR(20) DEFAULT 'Aberta'
-
-);
-
-
+      id SERIAL PRIMARY KEY,
+      parcelamento_id INTEGER,
+      numero INTEGER,
+      valor NUMERIC(10,2),
+      vencimento DATE,
+      data_pagamento DATE,
+      forma_pagamento TEXT,
+      status VARCHAR(20) DEFAULT 'Aberta'
+    );
   `);
 
   const lojaPadrao = await db.get("SELECT * FROM loja WHERE id = ?", [1]);
