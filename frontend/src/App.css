@@ -2132,3 +2132,213 @@ body {
   color: #0f172a;
   font-size: 20px;
 }
+
+
+.financeiro-container {
+  padding: 24px;
+  background-color: #f8fafc;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Cabeçalho */
+.financeiro-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.financeiro-titulo-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.financeiro-titulo {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+
+.status-badge-pulsar {
+  width: 10px;
+  height: 10px;
+  background-color: #ef4444;
+  border-radius: 50%;
+  position: relative;
+}
+
+.status-badge-pulsar::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background-color: #ef4444;
+  border-radius: 50%;
+  animation: pulsarAviso 2s infinite ease-in-out;
+  opacity: 0.6;
+}
+
+@keyframes pulsarAviso {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+
+.contas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+
+.conta-card {
+  background: #ffffff;
+  border: 1px border solid #f1f5f9;
+  border-radius: 12px;
+  padding: 20px;
+  display: grid;
+  
+  grid-template-columns: 1.2fr 1.5fr 1fr 1.2fr;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.conta-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+  border-color: #e2e8f0;
+}
+
+/* Coluna 1: Cliente */
+.cliente-info .cliente-nome {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  text-transform: capitalize; 
+  margin: 0 0 6px 0;
+}
+
+.cliente-info .cliente-contato {
+  font-size: 13px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+
+.compra-detalhes {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+  padding-right: 10px;
+  border-left: 3px solid #e2e8f0;
+  padding-left: 12px;
+}
+
+
+.progresso-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.badge-parcelas {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #dbeafe;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-block;
+  width: max-content;
+}
+
+
+.barra-progresso-bg {
+  width: 100%;
+  max-width: 120px;
+  background-color: #f1f5f9;
+  height: 6px;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.barra-progresso-fill {
+  height: 100%;
+  background-color: #3b82f6;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+/* Coluna 4: Valores e Botão */
+.valores-acao-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.valores-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.valor-total {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.valor-restante {
+  font-size: 15px;
+  font-weight: 700;
+  color: #d97706; 
+}
+
+.valor-parcela {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.btn-receber {
+  background-color: #0f172a;
+  color: #ffffff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  white-space: nowrap;
+}
+
+.btn-receber:hover {
+  background-color: #1e293b;
+}
+
+@media (max-width: 900px) {
+  .conta-card {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .compra-detalhes {
+    border-left: none;
+    border-top: 1px solid #f1f5f9;
+    padding-left: 0;
+    padding-top: 12px;
+  }
+  .valores-acao-wrapper {
+    border-top: 1px solid #f1f5f9;
+    padding-top: 12px;
+  }
+}
