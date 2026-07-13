@@ -17,7 +17,7 @@ function Vendas({ usuarioLogado }) {
   const [formaPagamento, setFormaPagamento] = useState("PIX");
   const [quantidadeParcelas, setQuantidadeParcelas] = useState("1");
 
-  // 🆕 Estado para armazenar os vencimentos customizados das parcelas
+  // Estado para armazenar os vencimentos customizados das parcelas
   const [vencimentos, setVencimentos] = useState([]);
 
   // Estados auxiliares para a seleção de itens individuais antes de ir ao carrinho
@@ -33,7 +33,7 @@ function Vendas({ usuarioLogado }) {
     carregarDados();
   }, []);
 
-  // 🆕 Monitora a quantidade de parcelas para gerar as datas automaticamente (de 30 em 30 dias)
+  // Monitora a quantidade de parcelas para gerar as datas automaticamente
   useEffect(() => {
     const qtd = Number(quantidadeParcelas) || 0;
     if (formaPagamento === "Parcelamento" && qtd > 0) {
@@ -41,7 +41,7 @@ function Vendas({ usuarioLogado }) {
       for (let i = 1; i <= qtd; i++) {
         const data = new Date();
         data.setDate(data.getDate() + (30 * i));
-        datasPadrao.push(data.toISOString().split("T")[0]); // Formato yyyy-MM-dd para o input
+        datasPadrao.push(data.toISOString().split("T")[0]);
       }
       setVencimentos(datasPadrao);
     } else {
@@ -49,7 +49,6 @@ function Vendas({ usuarioLogado }) {
     }
   }, [quantidadeParcelas, formaPagamento]);
 
-  // 🆕 Função para atualizar uma data específica alterada pelo vendedor
   const handleDataChange = (index, novaData) => {
     const novasDatas = [...vencimentos];
     novasDatas[index] = novaData;
@@ -84,7 +83,11 @@ function Vendas({ usuarioLogado }) {
       return;
     }
 
-    const itemExistenteIndex = carrinho.findIndex((c) => String(c.id) === String(itemEncontrado.id));
+    const ehLente = itemEncontrado.nome.toLowerCase().includes("lente");
+
+    // Para evitar agrupar lentes diferentes em uma única linha, não acumulamos se for lente
+    const itemExistenteIndex = ehLente ? -1 : carrinho.findIndex((c) => String(c.id) === String(itemEncontrado.id));
+    
     if (itemExistenteIndex > -1) {
       const novoCarrinho = [...carrinho];
       const novaQtd = novoCarrinho[itemExistenteIndex].quantidade + quantidadeItem;
@@ -102,6 +105,8 @@ function Vendas({ usuarioLogado }) {
           nome: itemEncontrado.nome,
           precoVenda: Number(itemEncontrado.precoVenda),
           quantidade: quantidadeItem,
+          ehLente: ehLente,
+          descricaoCustomizada: ehLente ? "" : itemEncontrado.nome
         },
       ]);
     }
@@ -112,6 +117,19 @@ function Vendas({ usuarioLogado }) {
 
   function removerDoCarrinho(indexItem) {
     setCarrinho(carrinho.filter((_, index) => index !== indexItem));
+  }
+
+  // Funções para manipular a edição na linha do carrinho
+  function atualizarPrecoItem(index, valor) {
+    const novoCarrinho = [...carrinho];
+    novoCarrinho[index].precoVenda = Number(valor) || 0;
+    setCarrinho(novoCarrinho);
+  }
+
+  function atualizarDescricaoItem(index, texto) {
+    const novoCarrinho = [...carrinho];
+    novoCarrinho[index].descricaoCustomizada = texto;
+    setCarrinho(novoCarrinho);
   }
 
   const valorTotalBruto = carrinho.reduce(
@@ -138,7 +156,11 @@ function Vendas({ usuarioLogado }) {
       return;
     }
 
-    const stringProdutos = carrinho.map((c) => `${c.nome} (x${c.quantidade})`).join(", ");
+    // Se o item for uma lente e possuir descrição personalizada, grava ela na string de produtos
+    const stringProdutos = carrinho.map((c) => {
+      const nomeExibicao = c.ehLente && c.descricaoCustomizada ? `Lente (${c.descricaoCustomizada})` : c.nome;
+      return `${nomeExibicao} (x${c.quantidade})`;
+    }).join(", ");
 
     const hoje = new Date();
     const dataFormatada = `${String(hoje.getDate()).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`;
@@ -165,7 +187,7 @@ function Vendas({ usuarioLogado }) {
           valor_total: valorFinal,
           entrada: Number(valorPago) || 0,
           quantidade_parcelas: Number(quantidadeParcelas) || 1,
-          vencimentos: vencimentos, // 🆕 Enviando o array de datas personalizadas para o backend
+          vencimentos: vencimentos,
         });
       }
 
@@ -182,7 +204,7 @@ function Vendas({ usuarioLogado }) {
       setAba("pedidos");
     } catch (erro) {
       console.error("Erro detalhado retornado pelo backend:", erro.response?.data || erro);
-      alert("Ocorreu um erro ao processar a venda. Pressione F12 e olhe a aba Console para ver o motivo.");
+      alert("Ocorreu um erro ao processar a venda.");
     }
   }
 
@@ -345,25 +367,52 @@ function Vendas({ usuarioLogado }) {
           {carrinho.length > 0 && (
             <div style={{ gridColumn: "span 2", background: "#f8fafc", border: "1px solid #e2e8f0", padding: "14px", borderRadius: "6px", margin: "5px 0 15px 0" }}>
               <h4 style={{ margin: "0 0 10px 0", color: "#0f172a" }}>🛒 Produtos Adicionados</h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 {carrinho.map((item, idx) => (
-                  <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", padding: "8px 12px", borderRadius: "4px", border: "1px solid #edf2f7" }}>
-                    <div>
-                      <span style={{ fontWeight: "500" }}>{item.nome}</span>
-                      <small style={{ color: "#64748b", marginLeft: "10px" }}>
-                        ({item.quantidade}x R$ {item.precoVenda.toFixed(2)})
-                      </small>
+                  <div key={idx} style={{ background: "#fff", padding: "12px", borderRadius: "6px", border: "1px solid #edf2f7" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: item.ehLente ? "8px" : "0" }}>
+                      <div>
+                        <span style={{ fontWeight: "600" }}>{item.nome}</span>
+                        {!item.ehLente && (
+                          <small style={{ color: "#64748b", marginLeft: "10px" }}>
+                            ({item.quantidade}x R$ {item.precoVenda.toFixed(2)})
+                          </small>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+                        {item.ehLente ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ fontSize: "13px", color: "#475569" }}>R$</span>
+                            <input 
+                              type="number"
+                              value={item.precoVenda}
+                              onChange={(e) => atualizarPrecoItem(idx, e.target.value)}
+                              style={{ width: "90px", padding: "4px 6px", marginBottom: 0, fontSize: "14px", fontWeight: "bold", border: "1px solid #cbd5e1", borderRadius: "4px" }}
+                            />
+                          </div>
+                        ) : (
+                          <span style={{ fontWeight: "bold" }}>R$ {(item.precoVenda * item.quantidade).toFixed(2)}</span>
+                        )}
+                        <button
+                          type="button"
+                          style={{ padding: "4px 8px", background: "#ef4444", color: "#fff", fontSize: "12px", width: "auto" }}
+                          onClick={() => removerDoCarrinho(idx)}
+                        >
+                          Remover
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-                      <span style={{ fontWeight: "bold" }}>R$ {(item.precoVenda * item.quantidade).toFixed(2)}</span>
-                      <button
-                        type="button"
-                        style={{ padding: "4px 8px", background: "#ef4444", color: "#fff", fontSize: "12px", width: "auto" }}
-                        onClick={() => removerDoCarrinho(idx)}
-                      >
-                        Remover
-                      </button>
-                    </div>
+
+                    {/* Campo customizado que só abre se o item for Lente */}
+                    {item.ehLente && (
+                      <input 
+                        type="text"
+                        placeholder="Informe o Laboratório, Marca, Grau ou Tratamentos da Lente..."
+                        value={item.descricaoCustomizada}
+                        onChange={(e) => atualizarDescricaoItem(idx, e.target.value)}
+                        style={{ width: "100%", padding: "6px 10px", marginTop: "4px", marginBottom: 0, fontSize: "13px", border: "1px solid #2563eb", borderRadius: "4px", background: "#f0f9ff" }}
+                      />
+                    )}
                   </div>
                 ))}
               </div>
@@ -410,7 +459,6 @@ function Vendas({ usuarioLogado }) {
             />
           )}
 
-          {/* 🆕 Mapeamento dinâmico dos vencimentos das parcelas na tela */}
           {formaPagamento === "Parcelamento" && vencimentos.length > 0 && (
             <div style={{ gridColumn: "span 2", background: "#f8fafc", border: "1px solid #cbd5e1", padding: "15px", borderRadius: "6px", margin: "10px 0" }}>
               <h4 style={{ margin: "0 0 12px 0", color: "#1e293b" }}>📅 Ajustar Datas de Vencimento</h4>
