@@ -66,14 +66,12 @@ function Financeiro() {
     }
   }
 
-  // Função modificada para enviar a parcela exata, limpando o número e tratando o erro interno
   async function confirmarPagamentoParcela() {
     if (!parcelamentoSelecionado || !parcelaIdSelecionada) {
       alert("Por favor, selecione uma parcela para dar baixa.");
       return;
     }
 
-    // Garante que o valor seja interpretado corretamente se o usuário digitar vírgula
     const valorTratado = Number(String(valorPagoEditavel).replace(",", "."));
 
     if (isNaN(valorTratado) || valorTratado <= 0) {
@@ -84,8 +82,8 @@ function Financeiro() {
     try {
       const resposta = await api.put(`/parcelamentos/${parcelamentoSelecionado.id}/pagar-parcela`, {
         usuario: "Financeiro",
-        parcelaId: Number(parcelaIdSelecionada),   // Garante o ID como número
-        valorPago: valorTratado                    // Envia o valor tratado (ponto ao invés de vírgula)
+        parcelaId: Number(parcelaIdSelecionada),
+        valorPago: valorTratado
       });
 
       alert(resposta.data.mensagem);
@@ -94,11 +92,10 @@ function Financeiro() {
       if (resposta.data.dados?.status === "Quitado") {
         setModalAberto(false);
       } else {
-        const atualizadas = await api.get(`/parcelamentos/detalhes/${parcelamentoSelecionado.id}`);
-        setParcelasDetalhes(atualizadas.data);
+        const updated = await api.get(`/parcelamentos/detalhes/${parcelamentoSelecionado.id}`);
+        setParcelasDetalhes(updated.data);
 
-        // Define a próxima pendente como selecionada após a atualização
-        const proxima = atualizadas.data.find(p => p.status !== "Pago");
+        const proxima = updated.data.find(p => p.status !== "Pago");
         if (proxima) {
           setParcelaIdSelecionada(proxima.id);
           setValorPagoEditavel(proxima.valor);
@@ -109,17 +106,15 @@ function Financeiro() {
       }
     } catch (erro) {
       console.error("Erro na requisição de pagamento:", erro);
-      // Exibe detalhes mais profundos do erro devolvido pelo servidor se houver
       const mensagemDoErro = erro.response?.data?.detalheDoErro || erro.response?.data?.mensagem || "Erro interno no servidor (Status 500).";
       alert(`Falha ao processar: ${mensagemDoErro}`);
     }
   }
 
-  // Função para quando clicar em cima de uma linha de parcela pendente
   function selecionarLinhaParcela(parc) {
     if (parc.status === "Pago") return;
     setParcelaIdSelecionada(parc.id);
-    setValorPagoEditavel(parc.valor); // Alimenta o input com o valor padrão dela para você editar
+    setValorPagoEditavel(parc.valor);
   }
 
   function dataBRParaISO(dataBR) {
@@ -240,36 +235,66 @@ function Financeiro() {
       )}
 
       {aba === "devedores" && (
-        <div className="lista">
-          <h2>Contas com Parcelas em Aberto 🔴</h2>
+        <div className="financeiro-container" style={{ padding: "0", minHeight: "auto" }}>
+          <div className="financeiro-header">
+            <div className="financeiro-titulo-wrapper">
+              <h2 className="financeiro-titulo" style={{ fontSize: "20px" }}>Contas com Parcelas em Aberto</h2>
+              <div className="status-badge-pulsar"></div>
+            </div>
+          </div>
+
           {devedores.length === 0 ? (
             <p>Nenhum cliente inadimplente ou com parcelamento em aberto.</p>
           ) : (
-            devedores.map((p) => (
-              <div className="item" key={p.id} style={{ borderLeft: "5px solid #ef4444" }}>
-                <strong>{p.cliente_nome}</strong>
-                <span>📞 Contato: {p.cliente_telefone || "Não cadastrado"}</span>
-                <span>📝 Descrição: {p.descricao || "Venda via Carnê / Parcelamento"}</span>
-                
-                <div style={{ margin: "8px 0", fontSize: "14px" }}>
-                  <span>Valor do Plano: <strong>R$ {Number(p.valor_total).toFixed(2)}</strong></span> |{" "}
-                  <span>Restante: <strong style={{ color: "#ef4444" }}>R$ {Number(p.valor_restante).toFixed(2)}</strong></span>
-                </div>
+            <div className="contas-lista">
+              {devedores.map((p) => {
+                const porcentagemPaga = (p.parcelas_pagas / p.quantidade_parcelas) * 100;
+                return (
+                  <div className="conta-card" key={p.id}>
+                    {/* Coluna 1: Nome e Contato */}
+                    <div className="cliente-info">
+                      <h3 className="cliente-nome">{p.cliente_nome.toLowerCase()}</h3>
+                      <span className="cliente-contato">📞 {p.cliente_telefone || "Não cadastrado"}</span>
+                    </div>
 
-                <div style={{ fontSize: "13px", color: "#64748b" }}>
-                  <span>Parcelas Pagas: {p.parcelas_pagas} de {p.quantidade_parcelas}</span> |{" "}
-                  <span>Valor da Parcela: R$ {Number(p.valor_parcela).toFixed(2)}</span>
-                </div>
+                    {/* Coluna 2: Descrição */}
+                    <div className="compra-detalhes">
+                      📝 {p.descricao || "Venda via Carnê / Parcelamento"}
+                    </div>
 
-                <button 
-                  type="button" 
-                  style={{ marginTop: "12px", background: "#0f172a", color: "#fff" }}
-                  onClick={() => abrirDetalhesParcelas(p)}
-                >
-                  Ver Parcelas e Dar Baixa
-                </button>
-              </div>
-            ))
+                    {/* Coluna 3: Progresso */}
+                    <div className="progresso-wrapper">
+                      <span className="badge-parcelas">
+                        Pagas: {p.parcelas_pagas} de {p.quantidade_parcelas}
+                      </span>
+                      <div className="barra-progresso-bg">
+                        <div 
+                          className="barra-progresso-fill" 
+                          style={{ width: `${porcentagemPaga}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* Coluna 4: Valores e Botão */}
+                    <div className="valores-acao-wrapper">
+                      <div className="valores-box">
+                        <span className="valor-total">Total: R$ {Number(p.valor_total).toFixed(2)}</span>
+                        <span className="valor-restante">Restam: R$ {Number(p.valor_restante).toFixed(2)}</span>
+                        <span className="valor-parcela">Parc: R$ {Number(p.valor_parcela).toFixed(2)}</span>
+                      </div>
+                      
+                      <button 
+                        type="button" 
+                        className="btn-receber"
+                        onClick={() => abrirDetalhesParcelas(p)}
+                      >
+                        Receber
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
@@ -289,7 +314,7 @@ function Financeiro() {
           </div>
 
           <section className="cards cards-menores">
-            <div className="card"><span>Faturamento Filtrado</span><strong>R$ {faturamentoFiltrado.toFixed(2)}</strong></div>
+            <div className="card"><span>Faturamento Filtrado</span>export <strong>R$ {faturamentoFiltrado.toFixed(2)}</strong></div>
             <div className="card"><span>Pedidos no Período</span><strong>{totalPedidosFiltrado}</strong></div>
             <div className="card"><span>Ticket Médio</span><strong>R$ {ticketMedioFiltrado.toFixed(2)}</strong></div>
             <div className="card"><span>PIX</span><strong>R$ {pixFiltrado.toFixed(2)}</strong></div>
