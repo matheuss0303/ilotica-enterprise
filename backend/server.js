@@ -21,7 +21,7 @@ async function iniciarServidor() {
     res.json({
       sistema: "IL Ótica",
       status: "online",
-      banco: "PostgreSQL conectado",
+      banco: "SQLite/PostgreSQL conectado", // Nota: Ajuste conforme sua lib real
     });
   });
 
@@ -395,7 +395,7 @@ async function iniciarServidor() {
   });
 
   // ==========================================
-  // VENDAS (ATUALIZADO COM FLUXO DE CARRINHO)
+  // VENDAS (FIXED DUPLICATION)
   // ==========================================
   app.get("/vendas", async (req, res) => {
     const vendas = await db.all("SELECT * FROM vendas ORDER BY id DESC");
@@ -414,16 +414,16 @@ async function iniciarServidor() {
         formaPagamento,
         status,
         usuario,
-        itens, // Array vindo do carrinho no Front-end
+        itens, 
       } = req.body;
 
-      if (!cliente || !produto || !valorTotal || !formaPagamento) {
+      if (!cliente || !valorTotal || !formaPagamento) {
         return res.status(400).json({
           mensagem: "Preencha os campos obrigatórios.",
         });
       }
 
-      // 1. Processa a baixa do estoque individual de cada item presente no carrinho
+      // 1. Processa a baixa do estoque individual de cada item
       if (itens && Array.isArray(itens) && itens.length > 0) {
         for (const item of itens) {
           if (item.id) {
@@ -433,8 +433,7 @@ async function iniciarServidor() {
             );
           }
         }
-      } else {
-        // Fallback preventivo caso a requisição venha no modelo antigo sem o array de itens
+      } else if (produto) {
         const produtoEncontrado = await db.get(
           "SELECT id FROM produtos WHERE nome = ?",
           [produto]
@@ -456,7 +455,7 @@ async function iniciarServidor() {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           cliente,
-          produto,
+          produto || "Itens Múltiplos",
           Number(valorTotal),
           Number(desconto) || 0,
           Number(valorPago) || 0,
@@ -477,7 +476,7 @@ async function iniciarServidor() {
         "INSERT INTO logs (usuario, acao, data, hora) VALUES (?, ?, ?, ?)",
         [
           usuario || "Sistema",
-          `Registrou venda para ${cliente} - Itens: ${produto} - Valor: R$ ${Number(valorTotal).toFixed(2)}`,
+          `Registrou venda para ${cliente} - Valor: R$ ${Number(valorTotal).toFixed(2)}`,
           datalog,
           horalog
         ]
