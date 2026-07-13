@@ -22,7 +22,7 @@ const transpotador = nodemailer.createTransport({
   service: "gmail",
   auth: {
     user: process.env.EMAIL_REMETENTE, 
-    pass: process.env.EMAIL_SENHA,     
+    pass: process.env.EMAIL_PASSWORD,     
   },
 });
 
