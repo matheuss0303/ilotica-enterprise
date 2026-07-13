@@ -76,10 +76,6 @@ function Dashboard({ usuarioLogado }) {
     (exame) => (exame.status_os || "Aguardando Lente") === "Aguardando Lente"
   ).length;
 
-const osAguardando = exames.filter(
-    (exame) => (exame.status_os || "Aguardando Lente") === "Aguardando Lente"
-  ).length;
-
   const osProducao = exames.filter(
     (exame) => exame.status_os === "Em Produção"
   ).length;
@@ -91,7 +87,7 @@ const osAguardando = exames.filter(
   const osEntregues = exames.filter(
     (exame) => exame.status_os === "Entregue"
   ).length;
-  
+
   const vendasPorPagamento = ["PIX", "Cartão", "Dinheiro"].map((forma) => ({
     name: forma,
     value: vendas.filter((venda) => venda.formaPagamento === forma).length,
