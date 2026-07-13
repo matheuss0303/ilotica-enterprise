@@ -76,18 +76,22 @@ function Dashboard({ usuarioLogado }) {
     (exame) => (exame.status_os || "Aguardando Lente") === "Aguardando Lente"
   ).length;
 
+const osAguardando = exames.filter(
+    (exame) => (exame.status_os || "Aguardando Lente") === "Aguardando Lente"
+  ).length;
+
   const osProducao = exames.filter(
-    (exame) => examen.status_os === "Em Produção"
+    (exame) => exame.status_os === "Em Produção"
   ).length;
 
   const osProntas = exames.filter(
-    (exame) => examen.status_os === "Pronto para Retirada"
+    (exame) => exame.status_os === "Pronto para Retirada"
   ).length;
 
   const osEntregues = exames.filter(
-    (exame) => examen.status_os === "Entregue"
+    (exame) => exame.status_os === "Entregue"
   ).length;
-
+  
   const vendasPorPagamento = ["PIX", "Cartão", "Dinheiro"].map((forma) => ({
     name: forma,
     value: vendas.filter((venda) => venda.formaPagamento === forma).length,
