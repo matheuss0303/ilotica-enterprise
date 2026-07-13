@@ -38,7 +38,7 @@ function Login({ setUsuarioLogado }) {
     }
 
     try {
-      await api.post("/enviar-codigo-recuperacao", {
+      await api.post("/esqueci-senha", {
         email: emailRecuperacao,
       });
 
@@ -66,9 +66,9 @@ function Login({ setUsuarioLogado }) {
     }
 
     try {
-      await api.post("/recuperar-senha", {
+      await api.post("/redefinir-senha", {
         email: emailRecuperacao,
-        codigo,
+        token: codigo,
         novaSenha,
       });
 
@@ -177,7 +177,7 @@ function Login({ setUsuarioLogado }) {
 
               <input
                 type="text"
-                placeholder="Código de 6 dígitos"
+                placeholder="Código de segurança"
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value)}
               />

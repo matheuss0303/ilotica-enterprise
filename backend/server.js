@@ -731,6 +731,122 @@ async function iniciarServidor() {
   });
 
   // ==========================================
+// ESQUECI A SENHA (RECUPERAÇÃO)
+// ==========================================
+const nodemailer = require("nodemailer");
+
+// Configuração do transportador de e-mail (Exemplo usando Gmail)
+// Para produção, use variáveis de ambiente (.env)
+const transpotador = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_REMETENTE, // Seu e-mail (ex: oticail@gmail.com)
+    pass: process.env.EMAIL_SENHA,     // Sua senha de app do Gmail
+  },
+});
+
+// Banco temporário em memória para guardar os tokens (vence em 15 minutos)
+let tokensRecuperacao = {};
+
+// ROTA 1: Solicitar a recuperação (Envia o e-mail)
+app.post("/esqueci-senha", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ mensagem: "O e-mail é obrigatório." });
+  }
+
+  const emailFormatado = email.toLowerCase().trim();
+  const usuario = await db.get("SELECT * FROM usuarios WHERE email = ?", [emailFormatado]);
+
+  if (!usuario) {
+    // Por segurança, você pode dizer que enviou mesmo se não achar, 
+    // mas em sistemas internos avisar que não existe ajuda o funcionário.
+    return res.status(404).json({ mensagem: "E-mail não cadastrado no sistema." });
+  }
+
+  // Gera um token aleatório seguro de 6 dígitos (estilo PIN) ou uma hash longa
+  const token = crypto.randomBytes(3).toString("hex").toUpperCase(); // Ex: A1B2C3
+  const expiracao = Date.now() + 15 * 60 * 1000; // 15 minutos a partir de agora
+
+  // Salva o token atrelado ao e-mail do usuário
+  tokensRecuperacao[emailFormatado] = { token, expiracao };
+
+  // Conteúdo do e-mail
+  const opcoesEmail = {
+    from: `"IL Ótica" <${process.env.EMAIL_REMETENTE}>`,
+    to: emailFormatado,
+    subject: "Recuperação de Senha - IL Ótica",
+    html: `
+      <div style="font-family: sans-serif; padding: 20px; color: #333;">
+        <h2>Recuperação de Senha - IL Ótica</h2>
+        <p>Olá, <strong>${usuario.nome}</strong>,</p>
+        <p>Você solicitou a recuperação de acesso ao sistema. Use o código abaixo para redefinir sua senha:</p>
+        <div style="background: #f4f4f4; padding: 15px; font-size: 24px; font-weight: bold; letter-spacing: 4px; text-align: center; border-radius: 4px; margin: 20px 0;">
+          ${token}
+        </div>
+        <p style="color: #777; font-size: 12px;">Este código é válido por 15 minutos. Se você não solicitou isso, ignore este e-mail.</p>
+      </div>
+    `,
+  };
+
+  try {
+    await transpotador.sendMail(opcoesEmail);
+    res.json({ mensagem: "Código de recuperação enviado para o e-mail informado." });
+  } catch (erro) {
+    console.error("Erro ao enviar e-mail:", erro);
+    res.status(500).json({ mensagem: "Erro ao enviar o e-mail de recuperação." });
+  }
+});
+
+// ROTA 2: Criar a nova senha usando o Token
+app.post("/redefinir-senha", async (req, res) => {
+  const { email, token, novaSenha } = req.body;
+
+  if (!email || !token || !novaSenha) {
+    return res.status(400).json({ mensagem: "Preencha todos os campos obrigatórios." });
+  }
+
+  const emailFormatado = email.toLowerCase().trim();
+  const registro = tokensRecuperacao[emailFormatado];
+
+  if (!registro || registro.token !== token.toUpperCase()) {
+    return res.status(400).json({ mensagem: "Código de validação inválido." });
+  }
+
+  if (Date.now() > registro.expiracao) {
+    delete tokensRecuperacao[emailFormatado];
+    return res.status(400).json({ mensagem: "Este código já expirou. Solicite um novo." });
+  }
+
+  // Criptografa a nova senha igualzinho você faz no cadastro
+  const senhaCriptografada = await bcrypt.hash(novaSenha, 10);
+
+  // Atualiza no banco de dados SQLite
+  await db.run("UPDATE usuarios SET senha = ? WHERE id = ?", [
+    senhaCriptografada,
+    usuario.id,
+  ]);
+
+  // Limpa o token para não ser usado de novo
+  delete tokensRecuperacao[emailFormatado];
+
+  // Salva no Log do sistema
+  const agora = new Date();
+  await db.run(
+    "INSERT INTO logs (usuario, acao, data, hora) VALUES (?, ?, ?, ?)",
+    [
+      "Sistema",
+      `O usuário ${emailFormatado} redefiniu a senha de acesso`,
+      agora.toLocaleDateString("pt-BR"),
+      agora.toLocaleTimeString("pt-BR"),
+    ]
+  );
+
+  res.json({ mensagem: "Senha alterada com sucesso! Você já pode fazer login." });
+});
+
+  // ==========================================
   // LOJA
   // ==========================================
   app.get("/loja", async (req, res) => {
