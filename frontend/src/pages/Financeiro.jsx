@@ -13,7 +13,7 @@ function Financeiro() {
   const [parcelamentoSelecionado, setParcelamentoSelecionado] = useState(null);
   const [modalAberto, setModalAberto] = useState(false);
 
-  // 🆕 NOVOS ESTADOS: Controlam qual parcela foi clicada e o valor customizado digitado
+  // Controlam qual parcela foi clicada e o valor customizado digitado
   const [parcelaIdSelecionada, setParcelaIdSelecionada] = useState("");
   const [valorPagoEditavel, setValorPagoEditavel] = useState("");
 
@@ -50,7 +50,7 @@ function Financeiro() {
       setParcelasDetalhes(resposta.data);
       setParcelamentoSelecionado(parcelamento);
       
-      // 🆕 Pré-seleciona automaticamente a primeira parcela que não estiver paga
+      // Pré-seleciona automaticamente a primeira parcela que não estiver paga
       const proximaPendente = resposta.data.find(p => p.status !== "Pago");
       if (proximaPendente) {
         setParcelaIdSelecionada(proximaPendente.id);
@@ -66,22 +66,29 @@ function Financeiro() {
     }
   }
 
-  // 🆕 Função modificada para enviar a parcela exata e o valor que você editou
+  // Função modificada para enviar a parcela exata, limpando o número e tratando o erro interno
   async function confirmarPagamentoParcela() {
     if (!parcelamentoSelecionado || !parcelaIdSelecionada) {
       alert("Por favor, selecione uma parcela para dar baixa.");
       return;
     }
 
+    // Garante que o valor seja interpretado corretamente se o usuário digitar vírgula
+    const valorTratado = Number(String(valorPagoEditavel).replace(",", "."));
+
+    if (isNaN(valorTratado) || valorTratado <= 0) {
+      alert("Por favor, insira um valor numérico válido para o pagamento.");
+      return;
+    }
+
     try {
       const resposta = await api.put(`/parcelamentos/${parcelamentoSelecionado.id}/pagar-parcela`, {
         usuario: "Financeiro",
-        parcelaId: parcelaIdSelecionada,      // Envia qual parcela está recebendo
-        valorPago: Number(valorPagoEditavel)   // Envia o valor customizado (ex: 70.00)
+        parcelaId: Number(parcelaIdSelecionada),   // Garante o ID como número
+        valorPago: valorTratado                    // Envia o valor tratado (ponto ao invés de vírgula)
       });
 
       alert(resposta.data.mensagem);
-
       buscarDevedores();
       
       if (resposta.data.dados?.status === "Quitado") {
@@ -101,11 +108,14 @@ function Financeiro() {
         }
       }
     } catch (erro) {
-      alert(erro.response?.data?.mensagem || "Erro ao processar o pagamento.");
+      console.error("Erro na requisição de pagamento:", erro);
+      // Exibe detalhes mais profundos do erro devolvido pelo servidor se houver
+      const mensagemDoErro = erro.response?.data?.detalheDoErro || erro.response?.data?.mensagem || "Erro interno no servidor (Status 500).";
+      alert(`Falha ao processar: ${mensagemDoErro}`);
     }
   }
 
-  // 🆕 Função para quando você clicar em cima de uma linha de parcela pendente
+  // Função para quando clicar em cima de uma linha de parcela pendente
   function selecionarLinhaParcela(parc) {
     if (parc.status === "Pago") return;
     setParcelaIdSelecionada(parc.id);
@@ -305,7 +315,7 @@ function Financeiro() {
         </div>
       )}
 
-      {/* MODAL DE HISTÓRICO ATUALIZADO COM ENTRADA DE VALOR EDITÁVEL */}
+      {/* MODAL DE HISTÓRICO ATUALIZADO */}
       {modalAberto && parcelamentoSelecionado && (
         <div className="modal-overlay" style={{
           position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
@@ -359,7 +369,7 @@ function Financeiro() {
               })}
             </div>
 
-            {/* 🆕 CAMPO DE EDIÇÃO DO VALOR RECEBIDO */}
+            {/* CAMPO DE EDIÇÃO DO VALOR RECEBIDO */}
             {parcelaIdSelecionada && (
               <div style={{
                 background: "#f0f9ff", padding: "16px", borderRadius: "8px", 
@@ -369,15 +379,14 @@ function Financeiro() {
                   💰 VALOR RECEBIDO DESTA PARCELA (R$):
                 </label>
                 <input 
-                  type="number"
-                  step="0.01"
+                  type="text"
                   style={{
                     width: "100%", padding: "10px", borderRadius: "6px", 
                     border: "2px solid #0284c7", fontSize: "18px", fontWeight: "bold",
                     color: "#0f172a", background: "#ffffff"
                   }}
                   value={valorPagoEditavel}
-                  onChange={(e) => setValorPagoEditavel(e.target.value)} // Libera a digitação (ex: de 50 para 70)
+                  onChange={(e) => setValorPagoEditavel(e.target.value)} 
                 />
                 <small style={{ color: "#0284c7", marginTop: "6px", display: "block", fontWeight: "500" }}>
                   💡 Clique em cima de qualquer parcela da lista para selecioná-la e altere o valor acima se o cliente pagou a mais ou a menos.
