@@ -16,12 +16,20 @@ let db;
 async function iniciarServidor() {
   db = await conectarBanco();
 
+  // Executa uma checagem de segurança para garantir as colunas de histórico no SQLite
+  try {
+    await db.run("ALTER TABLE parcelas ADD COLUMN data_pagamento TEXT").catch(() => {});
+    await db.run("ALTER TABLE parcelas ADD COLUMN valor_pago REAL").catch(() => {});
+  } catch (e) {
+    console.log("Colunas já existentes ou prontas.");
+  }
+
   // ROTA RAIZ
   app.get("/", (req, res) => {
     res.json({
       sistema: "IL Ótica",
       status: "online",
-      banco: "SQLite/PostgreSQL conectado", // Nota: Ajuste conforme sua lib real
+      banco: "SQLite/PostgreSQL conectado",
     });
   });
 
@@ -237,61 +245,59 @@ async function iniciarServidor() {
   });
 
   app.post("/parcelamentos", async (req, res) => {
-  try {
-    const {
-      cliente_id,
-      descricao,
-      valor_total,
-      entrada,
-      quantidade_parcelas,
-      vencimentos, // Array de strings ['2026-08-10', '2026-09-10', ...] enviado pelo frontend
-    } = req.body;
+    try {
+      const {
+        cliente_id,
+        descricao,
+        valor_total,
+        entrada,
+        quantidade_parcelas,
+        vencimentos,
+      } = req.body;
 
-    if (!cliente_id || !valor_total || !quantidade_parcelas) {
-      return res.status(400).json({ mensagem: "Dados obrigatórios não fornecidos." });
-    }
-
-    const valorEntrada = Number(entrada) || 0;
-    const valorTotal = Number(valor_total);
-    const valorRestante = valorTotal - valorEntrada;
-    const qtdParcelas = Number(quantidade_parcelas);
-    const valorParcela = valorRestante / qtdParcelas;
-
-    const resultado = await db.run(
-      `INSERT INTO parcelamentos
-      (cliente_id, descricao, valor_total, entrada, valor_restante, quantidade_parcelas, parcelas_pagas, valor_parcela, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [cliente_id, descricao, valorTotal, valorEntrada, valorRestante, qtdParcelas, 0, valorParcela, "Aberto"]
-    );
-
-    const parcelamentoId = resultado.lastID;
-
-    // Gerar as parcelas
-    for (let i = 1; i <= qtdParcelas; i++) {
-      let vencimentoFormatado;
-      
-      // Se o vendedor informou a data no front, usa ela. Se não, usa a regra dos 30 dias automática.
-      if (vencimentos && vencimentos[i - 1]) {
-        vencimentoFormatado = vencimentos[i - 1];
-      } else {
-        const dataVencimento = new Date();
-        dataVencimento.setDate(dataVencimento.getDate() + (30 * i));
-        vencimentoFormatado = dataVencimento.toISOString().split('T')[0];
+      if (!cliente_id || !valor_total || !quantidade_parcelas) {
+        return res.status(400).json({ mensagem: "Dados obrigatórios não fornecidos." });
       }
 
-      await db.run(
-        `INSERT INTO parcelas (parcelamento_id, numero, valor, vencimento, status)
-         VALUES (?, ?, ?, ?, ?)`,
-        [parcelamentoId, i, valorParcela, vencimentoFormatado, "Aberta"]
-      );
-    }
+      const valorEntrada = Number(entrada) || 0;
+      const valorTotal = Number(valor_total);
+      const valorRestante = valorTotal - valorEntrada;
+      const qtdParcelas = Number(quantidade_parcelas);
+      const valorParcela = valorRestante / qtdParcelas;
 
-    res.status(201).json({ id: parcelamentoId, mensagem: "Parcelamento gerado com sucesso." });
-  } catch (erro) {
-    console.error("Erro ao criar parcelamento:", erro);
-    res.status(500).json({ mensagem: "Erro interno ao gerar parcelamento." });
-  }
-});
+      const resultado = await db.run(
+        `INSERT INTO parcelamentos
+        (cliente_id, descricao, valor_total, entrada, valor_restante, quantidade_parcelas, parcelas_pagas, valor_parcela, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [cliente_id, descricao, valorTotal, valorEntrada, valorRestante, qtdParcelas, 0, valorParcela, "Aberto"]
+      );
+
+      const parcelamentoId = resultado.lastID;
+
+      for (let i = 1; i <= qtdParcelas; i++) {
+        let vencimentoFormatado;
+        
+        if (vencimentos && vencimentos[i - 1]) {
+          vencimentoFormatado = vencimentos[i - 1];
+        } else {
+          const dataVencimento = new Date();
+          dataVencimento.setDate(dataVencimento.getDate() + (30 * i));
+          vencimentoFormatado = dataVencimento.toISOString().split('T')[0];
+        }
+
+        await db.run(
+          `INSERT INTO parcelas (parcelamento_id, numero, valor, vencimento, status)
+           VALUES (?, ?, ?, ?, ?)`,
+          [parcelamentoId, i, valorParcela, vencimentoFormatado, "Aberta"]
+        );
+      }
+
+      res.status(201).json({ id: parcelamentoId, mensagem: "Parcelamento gerado com sucesso." });
+    } catch (erro) {
+      console.error("Erro ao criar parcelamento:", erro);
+      res.status(500).json({ mensagem: "Erro interno ao gerar parcelamento." });
+    }
+  });
 
   // ==========================================
   // PRODUTOS
@@ -379,7 +385,7 @@ async function iniciarServidor() {
   });
 
   // ==========================================
-  // VENDAS (FIXED DUPLICATION)
+  // VENDAS
   // ==========================================
   app.get("/vendas", async (req, res) => {
     const vendas = await db.all("SELECT * FROM vendas ORDER BY id DESC");
@@ -407,7 +413,6 @@ async function iniciarServidor() {
         });
       }
 
-      // 1. Processa a baixa do estoque individual de cada item
       if (itens && Array.isArray(itens) && itens.length > 0) {
         for (const item of itens) {
           if (item.id) {
@@ -432,7 +437,6 @@ async function iniciarServidor() {
 
       const data = new Date().toLocaleDateString("pt-BR");
 
-      // 2. Cria a venda unificada no Histórico
       const resultado = await db.run(
         `INSERT INTO vendas 
         (cliente, produto, valorTotal, desconto, valorPago, valorRestante, formaPagamento, status, data, usuario)
@@ -451,7 +455,6 @@ async function iniciarServidor() {
         ]
       );
 
-      // 3. Salva o histórico de atividade nos Logs
       const agora = new Date();
       const datalog = agora.toLocaleDateString("pt-BR");
       const horalog = agora.toLocaleTimeString("pt-BR");
@@ -830,45 +833,41 @@ async function iniciarServidor() {
   });
 
   // ==========================================
-  // RECEBER PARCELA (Dar baixa) - ADAPTADO PARA SQLITE
+  // RECEBER PARCELA (Dar baixa) - BLINDADO CONTRA ERROS 500
   // ==========================================
   app.put("/parcelamentos/:id/pagar-parcela", async (req, res) => {
-    const { id } = req.params; // ID do parcelamento vindo da URL
-    const { parcelaId, valorPago, usuario } = req.body; // Dados que o Financeiro.jsx envia
+    const { id } = req.params; 
+    const { parcelaId, valorPago, usuario } = req.body; 
 
     try {
       if (!parcelaId || valorPago === undefined) {
         return res.status(400).json({ mensagem: "Parcela ID e valor pago são obrigatórios." });
       }
 
-      // 1. Busca os dados da parcela específica que o usuário clicou (Usando db.get para SQLite)
+      // 1. Busca a parcela de forma segura
       const parcelaAtual = await db.get("SELECT * FROM parcelas WHERE id = ?", [parcelaId]);
       
       if (!parcelaAtual) {
-        return res.status(404).json({ mensagem: "Parcela não encontrada." });
+        return res.status(404).json({ mensagem: "Parcela não encontrada no banco de dados." });
       }
 
-      const valorOriginalDaParcela = Number(parcelaAtual.valor);
-      const valorEntreguePeloCliente = Number(valorPago);
-      const dataHoje = new Date().toISOString().split("T")[0]; // Formato 'AAAA-MM-DD'
+      const valorOriginalDaParcela = Number(parcelaAtual.valor) || 0;
+      const valorEntreguePeloCliente = Number(valorPago) || 0;
+      const dataHoje = new Date().toISOString().split("T")[0]; 
 
-      // 2. Atualiza a parcela atual como Paga, registrando a data e o valor real recebido
+      // 2. Atualiza a parcela clicada
       await db.run(
         "UPDATE parcelas SET status = 'Pago', data_pagamento = ?, valor_pago = ? WHERE id = ?",
         [dataHoje, valorEntreguePeloCliente, parcelaId]
       );
 
-      // 3. SE O CLIENTE PAGOU A MAIS (Ex: Deu 70 onde era 50)
+      // 3. SE O CLIENTE PAGOU A MAIS
       if (valorEntreguePeloCliente > valorOriginalDaParcela) {
-        const diferenca = valorEntreguePeloCliente - valorOriginalDaParcela; // 70 - 50 = 20
-
-        // Busca a próxima parcela que ainda não foi paga desse mesmo parcelamento
+        const diferenca = valorEntreguePeloCliente - valorOriginalDaParcela;
         const proximaParcela = await db.get(
           "SELECT * FROM parcelas WHERE parcelamento_id = ? AND status != 'Pago' ORDER BY numero ASC LIMIT 1",
           [id]
         );
-
-        // Se existir uma próxima parcela, desconta o valor dela
         if (proximaParcela) {
           await db.run(
             "UPDATE parcelas SET valor = valor - ? WHERE id = ?",
@@ -877,16 +876,13 @@ async function iniciarServidor() {
         }
       }
       
-      // 4. SE O CLIENTE PAGOU A MENOS (Ex: Deu 30 onde era 50)
+      // 4. SE O CLIENTE PAGOU A MENOS
       else if (valorEntreguePeloCliente < valorOriginalDaParcela) {
-        const diferenca = valorOriginalDaParcela - valorEntreguePeloCliente; // 50 - 30 = 20
-
-        // Joga a diferença para somar na próxima parcela em aberto
+        const diferenca = valorOriginalDaParcela - valorEntreguePeloCliente;
         const proximaParcela = await db.get(
           "SELECT * FROM parcelas WHERE parcelamento_id = ? AND status != 'Pago' ORDER BY numero ASC LIMIT 1",
           [id]
         );
-
         if (proximaParcela) {
           await db.run(
             "UPDATE parcelas SET valor = valor + ? WHERE id = ?",
@@ -895,13 +891,13 @@ async function iniciarServidor() {
         }
       }
 
-      // 5. Atualiza o valor restante geral e incrementa as parcelas pagas no registro principal
+      // 5. Atualiza o saldo restante geral
       await db.run(
-        "UPDATE parcelamentos SET valor_restante = valor_restante - ?, parcelas_pagas = parcelas_pagas + 1 WHERE id = ?",
-        [valorEntreguePeloCliente, id]
+        "UPDATE parcelamentos SET valor_restante = CASE WHEN (valor_restante - ?) < 0 THEN 0 ELSE (valor_restante - ?) END, parcelas_pagas = parcelas_pagas + 1 WHERE id = ?",
+        [valorEntreguePeloCliente, valorEntreguePeloCliente, id]
       );
 
-      // 6. Verifica se o plano todo foi quitado
+      // 6. Verifica se tudo foi quitado
       const restanteCheck = await db.get("SELECT valor_restante FROM parcelamentos WHERE id = ?", [id]);
       let statusFinal = "Aberto";
       
@@ -910,13 +906,14 @@ async function iniciarServidor() {
         await db.run("UPDATE parcelamentos SET status = 'Quitado' WHERE id = ?", [id]);
       }
 
-      // 7. Registra a atividade no histórico de Logs
+      // 7. Salva no histórico de Logs com tratamento anti-quebra
       const agora = new Date();
+      const numParcelaLog = parcelaAtual.numero || 0;
       await db.run(
         "INSERT INTO logs (usuario, acao, data, hora) VALUES (?, ?, ?, ?)",
         [
           usuario || "Financeiro",
-          `Recebeu R$ ${valorEntreguePeloCliente.toFixed(2)} da parcela ${parcelaAtual.numero} do parcelamento ID ${id}`,
+          `Recebeu R$ ${valorEntreguePeloCliente.toFixed(2)} da parcela ${numParcelaLog} do parcelamento ID ${id}`,
           agora.toLocaleDateString("pt-BR"),
           agora.toLocaleTimeString("pt-BR")
         ]
@@ -929,7 +926,10 @@ async function iniciarServidor() {
 
     } catch (erro) {
       console.error("Erro ao receber parcela:", erro);
-      return res.status(500).json({ mensagem: "Erro interno ao processar o pagamento." });
+      return res.status(500).json({ 
+        mensagem: "Erro interno no servidor.",
+        detalheDoErro: erro.message 
+      });
     }
   });
 
