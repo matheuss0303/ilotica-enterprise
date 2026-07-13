@@ -17,6 +17,9 @@ function Vendas({ usuarioLogado }) {
   const [formaPagamento, setFormaPagamento] = useState("PIX");
   const [quantidadeParcelas, setQuantidadeParcelas] = useState("1");
 
+  // 🆕 Estado para armazenar os vencimentos customizados das parcelas
+  const [vencimentos, setVencimentos] = useState([]);
+
   // Estados auxiliares para a seleção de itens individuais antes de ir ao carrinho
   const [produtoSelecionadoId, setProdutoSelecionadoId] = useState("");
   const [quantidadeItem, setQuantidadeItem] = useState(1);
@@ -29,6 +32,29 @@ function Vendas({ usuarioLogado }) {
   useEffect(() => {
     carregarDados();
   }, []);
+
+  // 🆕 Monitora a quantidade de parcelas para gerar as datas automaticamente (de 30 em 30 dias)
+  useEffect(() => {
+    const qtd = Number(quantidadeParcelas) || 0;
+    if (formaPagamento === "Parcelamento" && qtd > 0) {
+      const datasPadrao = [];
+      for (let i = 1; i <= qtd; i++) {
+        const data = new Date();
+        data.setDate(data.getDate() + (30 * i));
+        datasPadrao.push(data.toISOString().split("T")[0]); // Formato yyyy-MM-dd para o input
+      }
+      setVencimentos(datasPadrao);
+    } else {
+      setVencimentos([]);
+    }
+  }, [quantidadeParcelas, formaPagamento]);
+
+  // 🆕 Função para atualizar uma data específica alterada pelo vendedor
+  const handleDataChange = (index, novaData) => {
+    const novasDatas = [...vencimentos];
+    novasDatas[index] = novaData;
+    setVencimentos(novasDatas);
+  };
 
   async function carregarDados() {
     try {
@@ -114,7 +140,6 @@ function Vendas({ usuarioLogado }) {
 
     const stringProdutos = carrinho.map((c) => `${c.nome} (x${c.quantidade})`).join(", ");
 
-    // 🆕 Geração automática da data formatada
     const hoje = new Date();
     const dataFormatada = `${String(hoje.getDate()).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`;
 
@@ -129,7 +154,7 @@ function Vendas({ usuarioLogado }) {
         formaPagamento,
         status: valorRestante > 0 ? "Aguardando Pagamento" : "Orçamento",
         usuario: usuarioLogado?.nome || "Não identificado",
-        data: dataFormatada, // 🆕 Campo de data adicionado para evitar bloqueio do backend
+        data: dataFormatada,
         itens: carrinho, 
       });
 
@@ -140,6 +165,7 @@ function Vendas({ usuarioLogado }) {
           valor_total: valorFinal,
           entrada: Number(valorPago) || 0,
           quantidade_parcelas: Number(quantidadeParcelas) || 1,
+          vencimentos: vencimentos, // 🆕 Enviando o array de datas personalizadas para o backend
         });
       }
 
@@ -149,12 +175,12 @@ function Vendas({ usuarioLogado }) {
       setValorPago("");
       setFormaPagamento("PIX");
       setQuantidadeParcelas("1");
+      setVencimentos([]);
 
       alert("Pedido e fluxo financeiro criados com sucesso!");
       await carregarDados();
       setAba("pedidos");
     } catch (erro) {
-      // 🆕 Melhoria no Log de Erro para descobrirmos o que o backend recusou
       console.error("Erro detalhado retornado pelo backend:", erro.response?.data || erro);
       alert("Ocorreu um erro ao processar a venda. Pressione F12 e olhe a aba Console para ver o motivo.");
     }
@@ -382,6 +408,28 @@ function Vendas({ usuarioLogado }) {
               placeholder="Quantidade de Parcelas"
               required
             />
+          )}
+
+          {/* 🆕 Mapeamento dinâmico dos vencimentos das parcelas na tela */}
+          {formaPagamento === "Parcelamento" && vencimentos.length > 0 && (
+            <div style={{ gridColumn: "span 2", background: "#f8fafc", border: "1px solid #cbd5e1", padding: "15px", borderRadius: "6px", margin: "10px 0" }}>
+              <h4 style={{ margin: "0 0 12px 0", color: "#1e293b" }}>📅 Ajustar Datas de Vencimento</h4>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "12px" }}>
+                {vencimentos.map((data, index) => (
+                  <div key={index} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                    <label style={{ fontSize: "12px", fontWeight: "bold", color: "#475569" }}>
+                      {index + 1}ª Parcela:
+                    </label>
+                    <input
+                      type="date"
+                      value={data}
+                      onChange={(e) => handleDataChange(index, e.target.value)}
+                      style={{ padding: "6px", borderRadius: "4px", border: "1px solid #cbd5e1", fontSize: "13px" }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           <div className="resumo-venda">

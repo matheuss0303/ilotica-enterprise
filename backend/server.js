@@ -237,77 +237,61 @@ async function iniciarServidor() {
   });
 
   app.post("/parcelamentos", async (req, res) => {
-    try {
-      const {
-        cliente_id,
-        descricao,
-        valor_total,
-        entrada,
-        quantidade_parcelas,
-      } = req.body;
+  try {
+    const {
+      cliente_id,
+      descricao,
+      valor_total,
+      entrada,
+      quantidade_parcelas,
+      vencimentos, // Array de strings ['2026-08-10', '2026-09-10', ...] enviado pelo frontend
+    } = req.body;
 
-      if (!cliente_id || !valor_total || !quantidade_parcelas) {
-        return res.status(400).json({
-          mensagem: "Dados obrigatórios não fornecidos.",
-        });
-      }
+    if (!cliente_id || !valor_total || !quantidade_parcelas) {
+      return res.status(400).json({ mensagem: "Dados obrigatórios não fornecidos." });
+    }
 
-      const valorEntrada = Number(entrada) || 0;
-      const valorTotal = Number(valor_total);
-      const valorRestante = valorTotal - valorEntrada;
-      const qtdParcelas = Number(quantidade_parcelas);
-      const valorParcela = valorRestante / qtdParcelas;
+    const valorEntrada = Number(entrada) || 0;
+    const valorTotal = Number(valor_total);
+    const valorRestante = valorTotal - valorEntrada;
+    const qtdParcelas = Number(quantidade_parcelas);
+    const valorParcela = valorRestante / qtdParcelas;
 
-      const resultado = await db.run(
-        `INSERT INTO parcelamentos
-        (
-          cliente_id,
-          descricao,
-          valor_total,
-          entrada,
-          valor_restante,
-          quantidade_parcelas,
-          parcelas_pagas,
-          valor_parcela,
-          status
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          cliente_id,
-          descricao,
-          valorTotal,
-          valorEntrada,
-          valorRestante,
-          qtdParcelas,
-          0,
-          valorParcela,
-          "Aberto",
-        ]
-      );
+    const resultado = await db.run(
+      `INSERT INTO parcelamentos
+      (cliente_id, descricao, valor_total, entrada, valor_restante, quantidade_parcelas, parcelas_pagas, valor_parcela, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [cliente_id, descricao, valorTotal, valorEntrada, valorRestante, qtdParcelas, 0, valorParcela, "Aberto"]
+    );
 
-      const parcelamentoId = resultado.lastID;
+    const parcelamentoId = resultado.lastID;
 
-      for (let i = 1; i <= qtdParcelas; i++) {
+    // Gerar as parcelas
+    for (let i = 1; i <= qtdParcelas; i++) {
+      let vencimentoFormatado;
+      
+      // Se o vendedor informou a data no front, usa ela. Se não, usa a regra dos 30 dias automática.
+      if (vencimentos && vencimentos[i - 1]) {
+        vencimentoFormatado = vencimentos[i - 1];
+      } else {
         const dataVencimento = new Date();
         dataVencimento.setDate(dataVencimento.getDate() + (30 * i));
-        const vencimentoFormatado = dataVencimento.toISOString().split('T')[0];
-
-        await db.run(
-          `INSERT INTO parcelas (parcelamento_id, numero, valor, vencimento, status)
-           VALUES (?, ?, ?, ?, ?)`,
-          [parcelamentoId, i, valorParcela, vencimentoFormatado, "Aberta"]
-        );
+        vencimentoFormatado = dataVencimento.toISOString().split('T')[0];
       }
 
-      res.status(201).json({
-        id: parcelamentoId,
-        mensagem: "Parcelamento e parcelas geradas com sucesso.",
-      });
-    } catch (erro) {
-      console.error("Erro ao criar parcelamento:", erro);
-      res.status(500).json({ mensagem: "Erro interno ao gerar parcelamento." });
+      await db.run(
+        `INSERT INTO parcelas (parcelamento_id, numero, valor, vencimento, status)
+         VALUES (?, ?, ?, ?, ?)`,
+        [parcelamentoId, i, valorParcela, vencimentoFormatado, "Aberta"]
+      );
     }
-  });
+
+    res.status(201).json({ id: parcelamentoId, mensagem: "Parcelamento gerado com sucesso." });
+  } catch (erro) {
+    console.error("Erro ao criar parcelamento:", erro);
+    res.status(500).json({ mensagem: "Erro interno ao gerar parcelamento." });
+  }
+});
 
   // ==========================================
   // PRODUTOS
@@ -846,91 +830,87 @@ async function iniciarServidor() {
   });
 
   // RECEBER PARCELA (Dar baixa)
-  app.put("/parcelamentos/:id/pagar-parcela", async (req, res) => {
-    try {
-      const { id } = req.params;
+ app.put("/parcelamentos/:id/pagar-parcela", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { usuario, valorPagoInformado } = req.body; // Recebe o valor digitado pelo vendedor
 
-      const parcelamento = await db.get(
-        "SELECT * FROM parcelamentos WHERE id = ?",
-        [id]
-      );
+    const parcelamento = await db.get("SELECT * FROM parcelamentos WHERE id = ?", [id]);
 
-      if (!parcelamento) {
-        return res.status(404).json({
-          mensagem: "Parcelamento não encontrado.",
-        });
-      }
-
-      if (parcelamento.parcelas_pagas >= parcelamento.quantidade_parcelas) {
-        return res.status(400).json({
-          mensagem: "Este parcelamento já está totalmente quitado.",
-        });
-      }
-
-      const novasParcelasPagas = parcelamento.parcelas_pagas + 1;
-      
-      let novoValorRestante = parcelamento.valor_restante - parcelamento.valor_parcela;
-      if (novoValorRestante < 0 || novasParcelasPagas === parcelamento.quantidade_parcelas) {
-        novoValorRestante = 0;
-      }
-
-      let novoStatus = parcelamento.status;
-      if (novasParcelasPagas === parcelamento.quantidade_parcelas) {
-        novoStatus = "Quitado";
-      }
-
-      const proximaParcela = await db.get(
-        `SELECT id FROM parcelas 
-         WHERE parcelamento_id = ? AND status = 'Aberta' 
-         ORDER BY numero ASC LIMIT 1`,
-        [id]
-      );
-
-      if (proximaParcela) {
-        const dataHoje = new Date().toISOString().split('T')[0];
-        await db.run(
-          `UPDATE parcelas SET status = 'Pago', data_pagamento = ? 
-           WHERE id = ?`,
-          [dataHoje, proximaParcela.id]
-        );
-      }
-
-      await db.run(
-        `UPDATE parcelamentos SET
-           parcelas_pagas = ?,
-           valor_restante = ?,
-           status = ?
-         WHERE id = ?`,
-        [novasParcelasPagas, novoValorRestante, novoStatus, id]
-      );
-
-      const agora = new Date();
-      await db.run(
-        "INSERT INTO logs (usuario, acao, data, hora) VALUES (?, ?, ?, ?)",
-        [
-          req.body.usuario || "Sistema",
-          `Recebeu a parcela ${novasParcelasPagas}/${parcelamento.quantidade_parcelas} do parcelamento ID ${id}`,
-          agora.toLocaleDateString("pt-BR"),
-          agora.toLocaleTimeString("pt-BR"),
-        ]
-      );
-
-      res.json({
-        mensagem: "Parcela recebida com sucesso!",
-        dados: {
-          parcelas_pagas: novasParcelasPagas,
-          valor_restante: novoValorRestante,
-          status: novoStatus
-        }
-      });
-
-    } catch (erro) {
-      console.error("Erro ao receber parcela:", erro);
-      res.status(500).json({
-        mensagem: "Erro interno ao processar o pagamento.",
-      });
+    if (!parcelamento) {
+      return res.status(404).json({ mensagem: "Parcelamento não encontrado." });
     }
-  });
+
+    if (parcelamento.status === "Quitado" || parcelamento.valor_restante <= 0) {
+      return res.status(400).json({ mensagem: "Este parcelamento já está totalmente quitado." });
+    }
+
+    // Se o front não mandar valor, assume o valor padrão da parcela
+    const valorPago = valorPagoInformado ? Number(valorPagoInformado) : parcelamento.valor_parcela;
+
+    // Calcula o novo valor restante na dívida geral
+    let novoValorRestante = parcelamento.valor_restante - valorPago;
+    if (novoValorRestante < 0) novoValorRestante = 0;
+
+    const novasParcelasPagas = parcelamento.parcelas_pagas + 1;
+    
+    let novoStatus = parcelamento.status;
+    if (novoValorRestante === 0 || novasParcelasPagas >= parcelamento.quantidade_parcelas) {
+      novoStatus = "Quitado";
+    }
+
+    // Busca a próxima parcela aberta para atualizar o status dela
+    const proximaParcela = await db.get(
+      `SELECT id, valor FROM parcelas 
+       WHERE parcelamento_id = ? AND status = 'Aberta' 
+       ORDER BY numero ASC LIMIT 1`,
+      [id]
+    );
+
+    if (proximaParcela) {
+      const dataHoje = new Date().toISOString().split('T')[0];
+      // Registra na parcela individual o status de 'Pago'
+      await db.run(
+        `UPDATE parcelas SET status = 'Pago', data_pagamento = ? WHERE id = ?`,
+        [dataHoje, proximaParcela.id]
+      );
+    }
+
+    // Atualiza o registro principal do parcelamento com o abatimento real do dinheiro
+    await db.run(
+      `UPDATE parcelamentos SET
+         parcelas_pagas = ?,
+         valor_restante = ?,
+         status = ?
+       WHERE id = ?`,
+      [novasParcelasPagas, novoValorRestante, novoStatus, id]
+    );
+
+    const agora = new Date();
+    await db.run(
+      "INSERT INTO logs (usuario, acao, data, hora) VALUES (?, ?, ?, ?)",
+      [
+        usuario || "Sistema",
+        `Recebeu R$ ${valorPago.toFixed(2)} do parcelamento ID ${id} (Abatido do saldo restante)`,
+        agora.toLocaleDateString("pt-BR"),
+        agora.toLocaleTimeString("pt-BR"),
+      ]
+    );
+
+    res.json({
+      mensagem: "Pagamento processado com sucesso!",
+      dados: {
+        parcelas_pagas: novasParcelasPagas,
+        valor_restante: novoValorRestante,
+        status: novoStatus
+      }
+    });
+
+  } catch (erro) {
+    console.error("Erro ao receber parcela:", erro);
+    res.status(500).json({ mensagem: "Erro interno ao processar o pagamento." });
+  }
+});
 
   // INICIALIZAÇÃO DA PORTA
   const PORT = process.env.PORT || 3000;
