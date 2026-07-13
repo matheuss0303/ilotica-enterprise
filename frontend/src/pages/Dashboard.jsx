@@ -18,7 +18,7 @@ function Dashboard({ usuarioLogado }) {
   const [produtos, setProdutos] = useState([]);
   const [vendas, setVendas] = useState([]);
   const [exames, setExames] = useState([]);
-  const [totalDevedores, setTotalDevedores] = useState(0); // 🆕 Estado para armazenar o contador de devedores
+  const [totalDevedores, setTotalDevedores] = useState(0); 
   const podeVerFinanceiro = usuarioLogado?.tipo === "admin";
 
   useEffect(() => {
@@ -32,7 +32,6 @@ function Dashboard({ usuarioLogado }) {
       const vendasResposta = await api.get("/vendas");
       const examesResposta = await api.get("/exames");
       
-      // 🆕 Busca a contagem de clientes com parcelas em aberto
       const devedoresResposta = await api.get("/dashboard/devedores-contador");
 
       setClientes(clientesResposta.data);
@@ -59,7 +58,6 @@ function Dashboard({ usuarioLogado }) {
   }
 
   const hoje = new Date();
-  const hojeBR = hoje.toLocaleDateString("pt-BR");
   const mesHoje = String(hoje.getMonth() + 1).padStart(2, "0");
   const diaHoje = String(hoje.getDate()).padStart(2, "0");
 
@@ -68,15 +66,6 @@ function Dashboard({ usuarioLogado }) {
     const partes = cliente.nascimento.split("-");
     return partes[1] === mesHoje && partes[2] === diaHoje;
   });
-
-  const faturamentoTotal = vendas.reduce(
-    (total, venda) => total + Number(venda.valorTotal),
-    0
-  );
-
-  const faturamentoHoje = vendas
-    .filter((venda) => venda.data === hojeBR)
-    .reduce((total, venda) => total + Number(venda.valorTotal), 0);
 
   const estoqueBaixo = produtos.filter(
     (produto) =>
@@ -88,15 +77,15 @@ function Dashboard({ usuarioLogado }) {
   ).length;
 
   const osProducao = exames.filter(
-    (exame) => exame.status_os === "Em Produção"
+    (exame) => examen.status_os === "Em Produção"
   ).length;
 
   const osProntas = exames.filter(
-    (exame) => exame.status_os === "Pronto para Retirada"
+    (exame) => examen.status_os === "Pronto para Retirada"
   ).length;
 
   const osEntregues = exames.filter(
-    (exame) => exame.status_os === "Entregue"
+    (exame) => examen.status_os === "Entregue"
   ).length;
 
   const vendasPorPagamento = ["PIX", "Cartão", "Dinheiro"].map((forma) => ({
@@ -116,7 +105,7 @@ function Dashboard({ usuarioLogado }) {
   return (
     <section className="page">
       <h1>Dashboard</h1>
-      <p>Resumo financeiro, operacional e produtivo da IL Ótica.</p>
+      <p>Resumo operacional e produtivo da IL Ótica.</p>
 
       <div className="abas-internas">
         <button
@@ -167,17 +156,7 @@ function Dashboard({ usuarioLogado }) {
 
           {podeVerFinanceiro && (
             <>
-              <div className="card">
-                <span>Faturamento Total</span>
-                <strong>R$ {faturamentoTotal.toFixed(2)}</strong>
-              </div>
-
-              <div className="card">
-                <span>Faturamento Hoje</span>
-                <strong>R$ {faturamentoHoje.toFixed(2)}</strong>
-              </div>
-
-              {/* 🆕 NOVO CARD: Clientes com Parcelas em Aberto */}
+              {/* Mantido apenas o controle de inadimplência no bloco financeiro do painel */}
               <div className="card">
                 <span>🔴 Clientes Inadimplentes</span>
                 <strong>{totalDevedores}</strong>
