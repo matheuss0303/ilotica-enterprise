@@ -9,6 +9,9 @@ function Exames({ usuarioLogado }) {
   const [clientes, setClientes] = useState([]);
   const [busca, setBusca] = useState("");
 
+  // Estado para controlar se estamos editando um exame existente
+  const [idEdicao, setIdEdicao] = useState(null);
+
   const [cliente, setCliente] = useState("");
   const [data, setData] = useState("");
 
@@ -43,14 +46,19 @@ function Exames({ usuarioLogado }) {
   }, []);
 
   async function carregarDados() {
-    const examesResposta = await api.get("/exames");
-    const clientesResposta = await api.get("/clientes");
+    try {
+      const examesResposta = await api.get("/exames");
+      const clientesResposta = await api.get("/clientes");
 
-    setExames(examesResposta.data);
-    setClientes(clientesResposta.data);
+      setExames(examesResposta.data);
+      setClientes(clientesResposta.data);
+    } catch (error) {
+      console.error("Erro ao carregar dados:", error);
+    }
   }
 
   function limparFormulario() {
+    setIdEdicao(null);
     setCliente("");
     setData("");
 
@@ -87,96 +95,129 @@ function Exames({ usuarioLogado }) {
       return;
     }
 
-    await api.post("/exames", {
+    const dadosExame = {
       cliente,
       data,
       criadoPor: usuarioLogado?.nome || "Administrador",
-
       longe_od_esferico: longeOdEsferico,
       longe_od_cilindrico: longeOdCilindrico,
       longe_od_eixo: longeOdEixo,
       longe_od_dnp: longeOdDnp,
-
       longe_oe_esferico: longeOeEsferico,
       longe_oe_cilindrico: longeOeCilindrico,
       longe_oe_eixo: longeOeEixo,
       longe_oe_dnp: longeOeDnp,
-
       perto_od_esferico: pertoOdEsferico,
       perto_od_cilindrico: pertoOdCilindrico,
       perto_od_eixo: pertoOdEixo,
       perto_od_dnp: pertoOdDnp,
-
       perto_oe_esferico: pertoOeEsferico,
       perto_oe_cilindrico: pertoOeCilindrico,
       perto_oe_eixo: pertoOeEixo,
       perto_oe_dnp: pertoOeDnp,
-
       adicao,
       altura,
       medico,
       tipo_lente: tipoLente,
       observacoes,
-    });
+    };
 
-    limparFormulario();
-    await carregarDados();
-    setAba("receitas");
+    try {
+      if (idEdicao) {
+        // Se houver um idEdicao, faz um PUT para atualizar
+        await api.put(`/exames/${idEdicao}`, dadosExame);
+        alert("Receita atualizada com sucesso!");
+      } else {
+        // Caso contrário, faz um POST para criar nova
+        await api.post("/exames", dadosExame);
+        alert("Receita criada com sucesso!");
+      }
+
+      limparFormulario();
+      await carregarDados();
+      setAba("receitas");
+    } catch (error) {
+      console.error("Erro ao salvar exame:", error);
+      alert("Erro ao salvar a receita.");
+    }
+  }
+
+  function prepararEdicao(exame) {
+    setIdEdicao(exame.id);
+    setCliente(exame.cliente);
+    setData(exame.data ? examen.data.substring(0, 10) : ""); // garante formato YYYY-MM-DD para o input
+
+    setLongeOdEsferico(exame.longe_od_esferico || "");
+    setLongeOdCilindrico(exame.longe_od_cilindrico || "");
+    setLongeOdEixo(exame.longe_od_eixo || "");
+    setLongeOdDnp(exame.longe_od_dnp || "");
+
+    setLongeOeEsferico(exame.longe_oe_esferico || "");
+    setLongeOeCilindrico(exame.longe_oe_cilindrico || "");
+    setLongeOeEixo(exame.longe_oe_eixo || "");
+    setLongeOeDnp(exame.longe_oe_dnp || "");
+
+    setPertoOdEsferico(exame.perto_od_esferico || "");
+    setPertoOdCilindrico(exame.perto_od_cilindrico || "");
+    setPertoOdEixo(exame.perto_od_eixo || "");
+    setPertoOdDnp(exame.perto_od_dnp || "");
+
+    setPertoOeEsferico(exame.perto_oe_esferico || "");
+    setPertoOeCilindrico(exame.perto_oe_cilindrico || "");
+    setPertoOeEixo(exame.perto_oe_eixo || "");
+    setPertoOeDnp(exame.perto_oe_dnp || "");
+
+    setAdicao(exame.adicao || "");
+    setAltura(exame.altura || "");
+    setMedico(exame.medico || "");
+    setTipoLente(exame.tipo_lente || "");
+    setObservacoes(exame.observacoes || "");
+
+    setAba("nova"); // direciona para o formulário
   }
 
   async function alterarStatusOS(id, novoStatus) {
-  try {
-    await api.put(`/exames/${id}/status`, {
-      status_os: novoStatus,
-    });
-
-    await carregarDados();
-  } catch (error) {
-    console.error(error);
-    alert("Erro ao alterar status da O.S.");
-  }
-}
-
-async function excluirExame(id) {
-  await api.delete(`/exames/${id}`);
-  carregarDados();
-}
-
-function enviarWhatsApp(exame) {
-  const clienteEncontrado = clientes.find(
-    (c) => c.nome === exame.cliente
-  );
-
-  if (!clienteEncontrado) {
-    alert("Cliente não encontrado.");
-    return;
+    try {
+      await api.put(`/exames/${id}/status`, {
+        status_os: novoStatus,
+      });
+      await carregarDados();
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao alterar status da O.S.");
+    }
   }
 
-  const numero = (
-    clienteEncontrado.whatsapp ||
-    clienteEncontrado.telefone ||
-    ""
-  ).replace(/\D/g, "");
+  async function excluirExame(id) {
+    if (window.confirm("Tem certeza que deseja excluir esta receita?")) {
+      try {
+        await api.delete(`/exames/${id}`);
+        carregarDados();
+      } catch (error) {
+        console.error("Erro ao excluir:", error);
+      }
+    }
+  }
 
-  const mensagem = `
-Olá ${clienteEncontrado.nome}!
+  function enviarWhatsApp(exame) {
+    const clienteEncontrado = clientes.find((c) => c.nome === examen.cliente);
 
-Sua O.S Nº ${String(exame.id).padStart(4, "0")} já está pronta para retirada.
+    if (!clienteEncontrado) {
+      alert("Cliente não encontrado.");
+      return;
+    }
 
-📍 IL Ótica
-Rua João de Brito Lima Moura, 123
+    const numero = (
+      clienteEncontrado.whatsapp ||
+      clienteEncontrado.telefone ||
+      ""
+    ).replace(/\D/g, "");
 
-⏰ Segunda a Sábado
-09:00 às 18:00
+    const mensagem = `Olá ${clienteEncontrado.nome}!\n\nSua O.S Nº ${String(exame.id).padStart(4, "0")} já está pronta para retirada.\n\n📍 IL Ótica\nRua João de Brito Lima Moura, 123\n\n⏰ Segunda a Sábado\n09:00 às 18:00\n\n📞 (83) 98639-7545`;
 
-📞 (83) 98639-7545
-`;
-
-  const url = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`;
-
-  window.open(url, "_blank");
-}
-
+    const url = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`;
+    window.open(url, "_blank");
+  }
 
   function gerarPDF(exame) {
     const pdf = new jsPDF();
@@ -199,15 +240,16 @@ Rua João de Brito Lima Moura, 123
     pdf.text(`ALTURA: ${exame.altura || ""}`, 70, 150);
     pdf.text(`MÉDICO: ${exame.medico || ""}`, 125, 150);
 
-    
     pdf.text(`CLIENTE: ${exame.cliente}`, 15, 166);
     pdf.text(`TIPO DE LENTE: ${exame.tipo_lente || ""}`, 15, 182);
-    pdf.text(`DATA: ${exame.data}`, 15, 198);
+
+    const dataFormatada = exame.data ? exame.data.split("-").reverse().join("/") : "";
+    pdf.text(`DATA: ${dataFormatada}`, 15, 198);
 
     pdf.text("OBSERVAÇÕES:", 15, 216);
-    pdf.text(exame.observacoes || "Sem observações.", 15, 225, {
-      maxWidth: 175,
-    });
+    const obsTexto = exame.observacoes || "Sem observações.";
+    const linhasObs = pdf.splitTextToSize(obsTexto, 175);
+    pdf.text(linhasObs, 15, 225);
 
     pdf.save(`OS-${numeroOS}-${exame.cliente}.pdf`);
   }
@@ -263,7 +305,7 @@ Rua João de Brito Lima Moura, 123
     if (!dataExame) return 0;
 
     const hoje = new Date();
-    const dataExameObj = new Date(dataExame);
+    const dataExameObj = new Date(dataExame.replace(/-/g, "/"));
 
     const anos = hoje.getFullYear() - dataExameObj.getFullYear();
     const meses = hoje.getMonth() - dataExameObj.getMonth();
@@ -311,31 +353,26 @@ Rua João de Brito Lima Moura, 123
     .filter((item) => item.precisaRetorno);
 
   const previewExame = {
-    id: exames.length + 1,
+    id: idEdicao || exames.length + 1,
     cliente,
     data,
     criadoPor: usuarioLogado?.nome || "Administrador",
-
     longe_od_esferico: longeOdEsferico,
     longe_od_cilindrico: longeOdCilindrico,
     longe_od_eixo: longeOdEixo,
     longe_od_dnp: longeOdDnp,
-
     longe_oe_esferico: longeOeEsferico,
     longe_oe_cilindrico: longeOeCilindrico,
     longe_oe_eixo: longeOeEixo,
     longe_oe_dnp: longeOeDnp,
-
     perto_od_esferico: pertoOdEsferico,
     perto_od_cilindrico: pertoOdCilindrico,
     perto_od_eixo: pertoOdEixo,
     perto_od_dnp: pertoOdDnp,
-
     perto_oe_esferico: pertoOeEsferico,
     perto_oe_cilindrico: pertoOeCilindrico,
     perto_oe_eixo: pertoOeEixo,
     perto_oe_dnp: pertoOeDnp,
-
     adicao,
     altura,
     medico,
@@ -351,9 +388,12 @@ Rua João de Brito Lima Moura, 123
       <div className="abas-internas">
         <button
           className={aba === "nova" ? "aba-ativa" : ""}
-          onClick={() => setAba("nova")}
+          onClick={() => {
+            setAba("nova");
+            if (!idEdicao) limparFormulario();
+          }}
         >
-          Nova Receita
+          {idEdicao ? "Editar Receita" : "Nova Receita"}
         </button>
 
         <button
@@ -374,12 +414,11 @@ Rua João de Brito Lima Moura, 123
       {aba === "nova" && (
         <div className="exame-layout">
           <div className="exame-form-card">
-            <h2>Nova O.S / Receita</h2>
+            <h2>{idEdicao ? `Editando O.S Nº ${String(idEdicao).padStart(4, "0")}` : "Nova O.S / Receita"}</h2>
 
             <form className="form">
               <select value={cliente} onChange={(e) => setCliente(e.target.value)}>
                 <option value="">Selecione o cliente</option>
-
                 {clientes.map((item) => (
                   <option key={item.id} value={item.nome}>
                     {item.nome} - {item.telefone}
@@ -456,17 +495,22 @@ Rua João de Brito Lima Moura, 123
                 />
               </div>
 
-              
-
               <textarea
                 placeholder="Observações"
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value)}
               />
 
-              <button type="button" onClick={salvarExame}>
-                Salvar Receita
-              </button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="button" onClick={salvarExame}>
+                  {idEdicao ? "Salvar Alterações" : "Salvar Receita"}
+                </button>
+                {idEdicao && (
+                  <button type="button" className="btn-cancelar" onClick={limparFormulario} style={{ backgroundColor: '#777' }}>
+                    Cancelar Edição
+                  </button>
+                )}
+              </div>
             </form>
           </div>
 
@@ -496,37 +540,36 @@ Rua João de Brito Lima Moura, 123
                     O.S Nº {String(exame.id).padStart(4, "0")} - {exame.cliente}
                   </strong>
 
-                  <span>Data: {exame.data}</span>
+                  <span>Data: {exame.data ? exame.data.split("-").reverse().join("/") : ""}</span>
                   <span>Médico: {exame.medico || "Não informado"}</span>
                   <span>Tipo de lente: {exame.tipo_lente || "Não informado"}</span>
-                  <span> cadastrado por: {exame.criadoPor || "Sistema"}</span>
+                  <span>Cadastrado por: {exame.criadoPor || "Sistema"}</span>
+                  
                   <div className="status-os-area">
-  <span
-    className={`status-os ${
-      exame.status_os === "Pronto para Retirada"
-        ? "status-pronto"
-        : exame.status_os === "Em Produção"
-        ? "status-producao"
-        : exame.status_os === "Entregue"
-        ? "status-entregue"
-        : "status-aguardando"
-    }`}
-  >
-    {exame.status_os || "Aguardando Lente"}
-  </span>
+                    <span
+                      className={`status-os ${
+                        exame.status_os === "Pronto para Retirada"
+                          ? "status-pronto"
+                          : exame.status_os === "Em Produção"
+                          ? "status-producao"
+                          : exame.status_os === "Entregue"
+                          ? "status-entregue"
+                          : "status-aguardando"
+                      }`}
+                    >
+                      {exame.status_os || "Aguardando Lente"}
+                    </span>
 
-  <select
-    value={exame.status_os || "Aguardando Lente"}
-    onChange={(e) =>
-      alterarStatusOS(exame.id, e.target.value)
-    }
-  >
-    <option>Aguardando Lente</option>
-    <option>Em Produção</option>
-    <option>Pronto para Retirada</option>
-    <option>Entregue</option>
-  </select>
-</div>
+                    <select
+                      value={exame.status_os || "Aguardando Lente"}
+                      onChange={(e) => alterarStatusOS(exame.id, e.target.value)}
+                    >
+                      <option>Aguardando Lente</option>
+                      <option>Em Produção</option>
+                      <option>Pronto para Retirada</option>
+                      <option>Entregue</option>
+                    </select>
+                  </div>
 
                   <span>
                     Longe OD: {exame.longe_od_esferico || "-"} /{" "}
@@ -542,23 +585,29 @@ Rua João de Brito Lima Moura, 123
                     {exame.longe_oe_dnp || "-"}
                   </span>
 
-                  <button type="button" onClick={() => gerarPDF(exame)}>
-                    Gerar PDF / O.S
-                  </button>
+                  <div className="acoes-botoes" style={{ marginTop: '10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button type="button" onClick={() => gerarPDF(exame)}>
+                      Gerar PDF / O.S
+                    </button>
 
-                  {exame.status_os === "Pronto para Retirada" && (
-                    <button
-                      type="button"
-                      className="btn-whatsapp"
-                      onClick={() => enviarWhatsApp(exame)}
-                    >
-                      📱 Avisar Cliente
+                    <button type="button" className="btn-editar" onClick={() => prepararEdicao(exame)} style={{ backgroundColor: '#2196F3' }}>
+                      ✏️ Editar Receita
+                    </button>
+
+                    {exame.status_os === "Pronto para Retirada" && (
+                      <button
+                        type="button"
+                        className="btn-whatsapp"
+                        onClick={() => enviarWhatsApp(exame)}
+                      >
+                        📱 Avisar Cliente
                       </button>
-                  )}
-                  
-                  <button type="button" onClick={() => excluirExame(exame.id)}>
-                    Excluir
-                  </button>
+                    )}
+                    
+                    <button type="button" onClick={() => excluirExame(exame.id)} style={{ backgroundColor: '#f44336' }}>
+                      Excluir
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -575,14 +624,14 @@ Rua João de Brito Lima Moura, 123
             <p>Nenhum cliente pendente de retorno.</p>
           ) : (
             clientesComRetorno.map((item) => (
-              <div className="item pedido-card" key={item.cliente.id}>
+              <div className="item pedido-card" key={`retorno-${item.cliente.id}`}>
                 <strong>{item.cliente.nome}</strong>
                 <span>Telefone: {item.cliente.telefone}</span>
                 <span>WhatsApp: {item.cliente.whatsapp || "Não informado"}</span>
 
                 {item.ultimoExame ? (
                   <>
-                    <span>Último exame: {item.ultimoExame.data}</span>
+                    <span>Último exame: {item.ultimoExame.data ? item.ultimoExame.data.split("-").reverse().join("/") : ""}</span>
                     <span>Tempo sem retorno: {item.meses} meses</span>
                   </>
                 ) : (
@@ -676,7 +725,7 @@ function PreviewOS({ exame, logo }) {
           <span>MÉDICO: {exame.medico || "________"}</span>
           <span>CLIENTE: {exame.cliente || "________"}</span>
           <span>TIPO DE LENTE: {exame.tipo_lente || "________"}</span>
-          <span>DATA: {exame.data || "____/____/____"}</span>
+          <span>DATA: {exame.data ? exame.data.split("-").reverse().join("/") : "____/____/____"}</span>
         </div>
       </div>
     </aside>

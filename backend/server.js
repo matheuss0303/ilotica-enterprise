@@ -611,18 +611,109 @@ async function iniciarServidor() {
     });
   });
 
+  // ==========================================
+  // ROTAS DE EXAMES (ATUALIZAÇÃO, STATUS E EXCLUSÃO)
+  // ==========================================
+
+  app.put("/exames/:id", async (req, res) => {
+    const { id } = req.params;
+    const {
+      cliente,
+      data,
+      longe_od_esferico,
+      longe_od_cilindrico,
+      longe_od_eixo,
+      longe_od_dnp,
+      longe_oe_esferico,
+      longe_oe_cilindrico,
+      longe_oe_eixo,
+      longe_oe_dnp,
+      perto_od_esferico,
+      perto_od_cilindrico,
+      perto_od_eixo,
+      perto_od_dnp,
+      perto_oe_esferico,
+      perto_oe_cilindrico,
+      perto_oe_eixo,
+      perto_oe_dnp,
+      adicao,
+      altura,
+      medico,
+      tipo_lente,
+      observacoes,
+      criadoPor, // Sincronizado com o frontend para identificar o usuário logado
+    } = req.body;
+
+    if (!cliente || !data) {
+      return res.status(400).json({
+        mensagem: "Cliente e data são obrigatórios.",
+      });
+    }
+
+    try {
+      // 1. Atualiza os dados da receita/O.S.
+      await db.run(
+        `UPDATE exames SET
+          cliente = ?, data = ?,
+          longe_od_esferico = ?, longe_od_cilindrico = ?, longe_od_eixo = ?, longe_od_dnp = ?,
+          longe_oe_esferico = ?, longe_oe_cilindrico = ?, longe_oe_eixo = ?, longe_oe_dnp = ?,
+          perto_od_esferico = ?, perto_od_cilindrico = ?, perto_od_eixo = ?, perto_od_dnp = ?,
+          perto_oe_esferico = ?, perto_oe_cilindrico = ?, perto_oe_eixo = ?, perto_oe_dnp = ?,
+          adicao = ?, altura = ?, medico = ?, tipo_lente = ?, observacoes = ?
+        WHERE id = ?`,
+        [
+          cliente, data,
+          longe_od_esferico || "", longe_od_cilindrico || "", longe_od_eixo || "", longe_od_dnp || "",
+          longe_oe_esferico || "", longe_oe_cilindrico || "", longe_oe_eixo || "", longe_oe_dnp || "",
+          perto_od_esferico || "", perto_od_cilindrico || "", perto_od_eixo || "", perto_od_dnp || "",
+          perto_oe_esferico || "", perto_oe_cilindrico || "", perto_oe_eixo || "", perto_oe_dnp || "",
+          adicao || "", altura || "", medico || "", tipo_lente || "", observacoes || "",
+          id
+        ]
+      );
+
+      // 2. Registra a edição no histórico de logs
+      const agora = new Date();
+      await db.run(
+        "INSERT INTO logs (usuario, acao, data, hora) VALUES (?, ?, ?, ?)",
+        [
+          criadoPor || "Sistema",
+          `Editou a receita/O.S Nº ${id} do cliente ${cliente}`,
+          agora.toLocaleDateString("pt-BR"),
+          agora.toLocaleTimeString("pt-BR"),
+        ]
+      );
+
+      res.json({ mensagem: "Receita atualizada com sucesso!" });
+    } catch (erro) {
+      console.error("Erro ao atualizar exame:", erro);
+      res.status(500).json({ mensagem: "Erro ao atualizar a receita." });
+    }
+  });
+
   app.put("/exames/:id/status", async (req, res) => {
     const { id } = req.params;
     const { status_os } = req.body;
 
-    await db.run("UPDATE exames SET status_os = ? WHERE id = ?", [status_os, id]);
-    res.json({ mensagem: "Status da O.S atualizado com sucesso." });
+    try {
+      await db.run("UPDATE exames SET status_os = ? WHERE id = ?", [status_os, id]);
+      res.json({ mensagem: "Status da O.S atualizado com sucesso." });
+    } catch (erro) {
+      console.error("Erro ao atualizar status:", erro);
+      res.status(500).json({ mensagem: "Erro ao atualizar status da O.S." });
+    }
   });
 
   app.delete("/exames/:id", async (req, res) => {
     const { id } = req.params;
-    await db.run("DELETE FROM exames WHERE id = ?", [id]);
-    res.json({ mensagem: "Exame removido com sucesso." });
+    
+    try {
+      await db.run("DELETE FROM exames WHERE id = ?", [id]);
+      res.json({ mensagem: "Exame removido com sucesso." });
+    } catch (erro) {
+      console.error("Erro ao deletar exame:", erro);
+      res.status(500).json({ mensagem: "Erro ao excluir a receita." });
+    }
   });
 
   // ==========================================
@@ -862,6 +953,21 @@ async function iniciarServidor() {
     );
 
     res.json({ mensagem: "Dados da loja updated." });
+  });
+
+  // ==========================================
+  // BACKUP
+  // ==========================================
+  app.get("/backup", (req, res) => {
+    const caminhoBanco = "./ilotica.db";
+
+    res.download(caminhoBanco, "backup-ilotica.db", (erro) => {
+      if (erro) {
+        res.status(500).json({
+          mensagem: "Erro ao gerar backup.",
+        });
+      }
+    });
   });
 
   // ==========================================
