@@ -124,11 +124,9 @@ function Exames({ usuarioLogado }) {
 
     try {
       if (idEdicao) {
-        // Se houver um idEdicao, faz um PUT para atualizar
         await api.put(`/exames/${idEdicao}`, dadosExame);
         alert("Receita atualizada com sucesso!");
       } else {
-        // Caso contrário, faz um POST para criar nova
         await api.post("/exames", dadosExame);
         alert("Receita criada com sucesso!");
       }
@@ -145,7 +143,8 @@ function Exames({ usuarioLogado }) {
   function prepararEdicao(exame) {
     setIdEdicao(exame.id);
     setCliente(exame.cliente);
-    setData(exame.data ? examen.data.substring(0, 10) : ""); // garante formato YYYY-MM-DD para o input
+    // CORRIGIDO: de examen.data para exame.data
+    setData(exame.data ? exame.data.substring(0, 10) : ""); 
 
     setLongeOdEsferico(exame.longe_od_esferico || "");
     setLongeOdCilindrico(exame.longe_od_cilindrico || "");
@@ -173,7 +172,7 @@ function Exames({ usuarioLogado }) {
     setTipoLente(exame.tipo_lente || "");
     setObservacoes(exame.observacoes || "");
 
-    setAba("nova"); // direciona para o formulário
+    setAba("nova"); // Agora muda a tela normalmente!
   }
 
   async function alterarStatusOS(id, novoStatus) {
@@ -200,7 +199,8 @@ function Exames({ usuarioLogado }) {
   }
 
   function enviarWhatsApp(exame) {
-    const clienteEncontrado = clientes.find((c) => c.nome === examen.cliente);
+    // CORRIGIDO: de examen.cliente para exame.cliente
+    const clienteEncontrado = clientes.find((c) => c.nome === exame.cliente);
 
     if (!clienteEncontrado) {
       alert("Cliente não encontrado.");
@@ -469,7 +469,7 @@ function Exames({ usuarioLogado }) {
                 oeEixo={pertoOeEixo}
                 setOeEixo={setPertoOeEixo}
                 oeDnp={pertoOeDnp}
-                setOeDnp={setPertoOeDnp}
+                setOeDnp={setpertoOeDnp}
               />
 
               <div className="exame-extra-grid">
@@ -514,7 +514,7 @@ function Exames({ usuarioLogado }) {
             </form>
           </div>
 
-          <PreviewOS exame={previewExame} logo={logo} />
+          <PreviewOS examen={previewExame} logo={logo} />
         </div>
       )}
 
@@ -590,7 +590,7 @@ function Exames({ usuarioLogado }) {
                       Gerar PDF / O.S
                     </button>
 
-                    <button type="button" className="btn-editar" onClick={() => prepararEdicao(exame)} style={{ backgroundColor: '#2196F3' }}>
+                    <button type="button" className="btn-editar" onClick={() => prepararEdicao(exame)} style={{ backgroundColor: '#2196F3', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
                       ✏️ Editar Receita
                     </button>
 
@@ -703,8 +703,8 @@ function TabelaInputs({
   );
 }
 
-function PreviewOS({ exame, logo }) {
-  const numeroOS = String(exame.id).padStart(4, "0");
+function PreviewOS({ examen, logo }) {
+  const numeroOS = String(examen.id).padStart(4, "0");
 
   return (
     <aside className="os-preview">
@@ -716,16 +716,16 @@ function PreviewOS({ exame, logo }) {
 
         <h3>Receita Oftalmológica</h3>
 
-        <PreviewTabela titulo="Longe" exame={exame} tipo="longe" />
-        <PreviewTabela titulo="Perto" exame={exame} tipo="perto" />
+        <PreviewTabela titulo="Longe" exame={examen} tipo="longe" />
+        <PreviewTabela titulo="Perto" exame={examen} tipo="perto" />
 
         <div className="os-info">
-          <span>ADIÇÃO: {exame.adicao || "________"}</span>
-          <span>ALTURA: {exame.altura || "________"}</span>
-          <span>MÉDICO: {exame.medico || "________"}</span>
-          <span>CLIENTE: {exame.cliente || "________"}</span>
-          <span>TIPO DE LENTE: {exame.tipo_lente || "________"}</span>
-          <span>DATA: {exame.data ? exame.data.split("-").reverse().join("/") : "____/____/____"}</span>
+          <span>ADIÇÃO: {examen.adicao || "________"}</span>
+          <span>ALTURA: {examen.altura || "________"}</span>
+          <span>MÉDICO: {examen.medico || "________"}</span>
+          <span>CLIENTE: {examen.cliente || "________"}</span>
+          <span>TIPO DE LENTE: {examen.tipo_lente || "________"}</span>
+          <span>DATA: {examen.data ? examen.data.split("-").reverse().join("/") : "____/____/____"}</span>
         </div>
       </div>
     </aside>
@@ -736,7 +736,7 @@ function PreviewTabela({ titulo, exame, tipo }) {
   return (
     <div className="preview-tabela">
       <div className="preview-grid preview-header">
-        <span>{titulo}</span>
+        <span>={titulo}</span>
         <span>Esférico</span>
         <span>Cilíndrico</span>
         <span>Eixo</span>
