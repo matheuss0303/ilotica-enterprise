@@ -469,7 +469,7 @@ function Exames({ usuarioLogado }) {
                 oeEixo={pertoOeEixo}
                 setOeEixo={setPertoOeEixo}
                 oeDnp={pertoOeDnp}
-                setOeDnp={setpertoOeDnp}
+                setOeDnp={setPertoOeDnp}
               />
 
               <div className="exame-extra-grid">
