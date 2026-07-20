@@ -9,15 +9,21 @@ require("dotenv").config();
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: "https://ilotica-enterprise.vercel.app",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+}));
+
+app.options("*", cors());
+
 app.use(express.json({ limit: "50mb" }));
 
 let db;
 
-// Banco temporário em memória para guardar os tokens (vence em 15 minutos)
 let tokensRecuperacao = {};
 
-// Configuração do transportador de e-mail usando Gmail
 const transpotador = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -29,7 +35,6 @@ const transpotador = nodemailer.createTransport({
 async function iniciarServidor() {
   db = await conectarBanco();
 
-  // Executa uma checagem de segurança para garantir as colunas de histórico no SQLite
   try {
     await db.run("ALTER TABLE parcelas ADD COLUMN data_pagamento TEXT").catch(() => {});
     await db.run("ALTER TABLE parcelas ADD COLUMN valor_pago REAL").catch(() => {});
