@@ -36,17 +36,19 @@ function Vendas({ usuarioLogado }) {
   // Monitora a quantidade de parcelas para gerar as datas automaticamente
   useEffect(() => {
     const qtd = Number(quantidadeParcelas) || 0;
-    if (formaPagamento === "Parcelamento" && qtd > 0) {
-      const datasPadrao = [];
-      for (let i = 1; i <= qtd; i++) {
-        const data = new Date();
-        data.setDate(data.getDate() + (30 * i));
-        datasPadrao.push(data.toISOString().split("T")[0]);
+    setTimeout(() => {
+      if (formaPagamento === "Parcelamento" && qtd > 0) {
+        const datasPadrao = [];
+        for (let i = 1; i <= qtd; i++) {
+          const data = new Date();
+          data.setDate(data.getDate() + 30 * i);
+          datasPadrao.push(data.toISOString().split("T")[0]);
+        }
+        setVencimentos(datasPadrao);
+      } else {
+        setVencimentos([]);
       }
-      setVencimentos(datasPadrao);
-    } else {
-      setVencimentos([]);
-    }
+    }, 0);
   }, [quantidadeParcelas, formaPagamento]);
 
   const handleDataChange = (index, novaData) => {
@@ -87,7 +89,7 @@ function Vendas({ usuarioLogado }) {
 
     // Para evitar agrupar lentes diferentes em uma única linha, não acumulamos se for lente
     const itemExistenteIndex = ehLente ? -1 : carrinho.findIndex((c) => String(c.id) === String(itemEncontrado.id));
-    
+
     if (itemExistenteIndex > -1) {
       const novoCarrinho = [...carrinho];
       const novaQtd = novoCarrinho[itemExistenteIndex].quantidade + quantidadeItem;
@@ -106,7 +108,7 @@ function Vendas({ usuarioLogado }) {
           precoVenda: Number(itemEncontrado.precoVenda),
           quantidade: quantidadeItem,
           ehLente: ehLente,
-          descricaoCustomizada: ehLente ? "" : itemEncontrado.nome
+          descricaoCustomizada: ehLente ? "" : itemEncontrado.nome,
         },
       ]);
     }
@@ -177,7 +179,7 @@ function Vendas({ usuarioLogado }) {
         status: valorRestante > 0 ? "Aguardando Pagamento" : "Orçamento",
         usuario: usuarioLogado?.nome || "Não identificado",
         data: dataFormatada,
-        itens: carrinho, 
+        itens: carrinho,
       });
 
       if (formaPagamento === "Parcelamento") {
