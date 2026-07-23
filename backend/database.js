@@ -36,11 +36,12 @@ function ajustarLinha(row) {
 }
 
 async function conectarBanco() {
+  const dbUrl = process.env.DATABASE_URL || "";
+  const isLocal = dbUrl.includes("127.0.0.1") || dbUrl.includes("localhost");
+
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-      rejectUnauthorized: false,
-    },
+    connectionString: dbUrl,
+    ssl: isLocal ? false : { rejectUnauthorized: false },
   });
 
   const db = {
