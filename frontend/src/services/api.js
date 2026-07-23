@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://179.197.238.168:5000",
+  baseURL: import.meta.env.VITE_API_URL || "https://api.sistemailotica.com",
 });
 
 export default api;
