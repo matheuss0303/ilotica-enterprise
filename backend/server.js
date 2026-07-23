@@ -16,7 +16,7 @@ app.use(cors({
   credentials: true
 }));
 
-app.options("*", cors());
+app.options("/(.*)", cors());
 
 app.use(express.json({ limit: "50mb" }));
 
@@ -1078,11 +1078,13 @@ async function iniciarServidor() {
       const valorEntreguePeloCliente = Number(valorPago) || 0;
       const dataHoje = new Date().toISOString().split("T")[0]; 
 
+      // 1. Marca a parcela atual como paga
       await db.run(
         "UPDATE parcelas SET status = 'Pago', data_pagamento = ?, valor_pago = ? WHERE id = ?",
         [dataHoje, valorEntreguePeloCliente, parcelaId]
       );
 
+      // 2. Trata diferença se o valor for maior ou menor
       if (valorEntreguePeloCliente > valorOriginalDaParcela) {
         const diferenca = valorEntreguePeloCliente - valorOriginalDaParcela;
         const proximaParcela = await db.get(
@@ -1091,12 +1093,11 @@ async function iniciarServidor() {
         );
         if (proximaParcela) {
           await db.run(
-            "UPDATE parcelas SET valor = valor - ? WHERE id = ?",
-            [diferenca, proximaParcela.id]
+            "UPDATE parcelas SET valor = CASE WHEN (valor - ?) < 0 THEN 0 ELSE (valor - ?) END WHERE id = ?",
+            [diferenca, diferenca, proximaParcela.id]
           );
         }
-      }
-      else if (valorEntreguePeloCliente < valorOriginalDaParcela) {
+      } else if (valorEntreguePeloCliente < valorOriginalDaParcela) {
         const diferenca = valorOriginalDaParcela - valorEntreguePeloCliente;
         const proximaParcela = await db.get(
           "SELECT * FROM parcelas WHERE parcelamento_id = ? AND status != 'Pago' ORDER BY numero ASC LIMIT 1",
@@ -1110,49 +1111,49 @@ async function iniciarServidor() {
         }
       }
 
+      // 3. Atualiza as parcelas pagas e verifica se concluiu o parcelamento
       await db.run(
-        "UPDATE parcelamentos SET valor_restante = CASE WHEN (valor_restante - ?) < 0 THEN 0 ELSE (valor_restante - ?) END, parcelas_pagas = parcelas_pagas + 1 WHERE id = ?",
-        [valorEntreguePeloCliente, valorEntreguePeloCliente, id]
+        "UPDATE parcelamentos SET parcelas_pagas = parcelas_pagas + 1 WHERE id = ?",
+        [id]
       );
 
-      const restanteCheck = await db.get("SELECT valor_restante FROM parcelamentos WHERE id = ?", [id]);
-      let statusFinal = "Aberto";
-      
-      if (restanteCheck && Number(restanteCheck.valor_restante) <= 0) {
-        statusFinal = "Quitado";
-        await db.run("UPDATE parcelamentos SET status = 'Quitado' WHERE id = ?", [id]);
+      const parcelasRestantes = await db.all(
+        "SELECT id FROM parcelas WHERE parcelamento_id = ? AND status != 'Pago'",
+        [id]
+      );
+
+      if (parcelasRestantes.length === 0) {
+        await db.run(
+          "UPDATE parcelamentos SET status = 'Quitado' WHERE id = ?",
+          [id]
+        );
       }
 
+      // 4. Grava o log da operação
       const agora = new Date();
-      const numParcelaLog = parcelaAtual.numero || 0;
       await db.run(
         "INSERT INTO logs (usuario, acao, data, hora) VALUES (?, ?, ?, ?)",
         [
-          usuario || "Financeiro",
-          `Recebeu R$ ${valorEntreguePeloCliente.toFixed(2)} da parcela ${numParcelaLog} do parcelamento ID ${id}`,
+          usuario || "Sistema",
+          `Recebeu o pagamento da parcela Nº ${parcelaAtual.numero} (R$ ${valorEntreguePeloCliente.toFixed(2)}) do parcelamento Nº ${id}`,
           agora.toLocaleDateString("pt-BR"),
           agora.toLocaleTimeString("pt-BR")
         ]
       );
 
-      return res.json({
-        mensagem: `Pagamento de R$ ${valorEntreguePeloCliente.toFixed(2)} registrado com sucesso!`,
-        dados: { status: statusFinal }
-      });
-
+      res.json({ mensagem: "Pagamento registrado com sucesso!" });
     } catch (erro) {
-      console.error("Erro ao receber parcela:", erro);
-      return res.status(500).json({ 
-        mensagem: "Erro interno no servidor.",
-        detalheDoErro: erro.message 
-      });
+      console.error("Erro ao dar baixa na parcela:", erro);
+      res.status(500).json({ mensagem: "Erro ao processar o pagamento da parcela." });
     }
   });
 
+  // ==========================================
   // INICIALIZAÇÃO DA PORTA
-  const PORT = process.env.PORT || 3000;
+  // ==========================================
+  const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
+    console.log("Servidor rodando na porta", PORT);
   });
 }
 
